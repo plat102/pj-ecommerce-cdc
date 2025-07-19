@@ -1,14 +1,21 @@
-DOCKER_DIR=infrastructure/docker
-DOCKER_COMPOSE_FILE=$(DOCKER_DIR)/docker-compose.yml
-DOCKER_ENV_FILE=$(DOCKER_DIR)/.env
-PROJECT_NAME=ecommerce-cdc
-COMPOSE := docker-compose -p $(PROJECT_NAME) -f $(DOCKER_COMPOSE_FILE) --env-file $(DOCKER_ENV_FILE)
+DOCKER_DIR := infrastructure/docker
+ENV_FILE := $(DOCKER_DIR)/.env
+PROJECT_NAME := ecommerce-cdc
 
-# Load all vars from .env into Make environment
-include $(DOCKER_ENV_FILE)
-export $(shell sed 's/=.*//' $(DOCKER_ENV_FILE))
+COMPOSE = docker-compose -p $(PROJECT_NAME) --env-file $(ENV_FILE)
 
-.PHONY: help build up down logs status clean restart sh-pg
+COMPOSE_DB := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.db.yml
+COMPOSE_KAFKA := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.kafka.yml
+
+COMPOSE_ALL := $(COMPOSE) \
+	-f $(DOCKER_DIR)/docker-compose.db.yml \
+	-f $(DOCKER_DIR)/docker-compose.kafka.yml 
+
+include $(ENV_FILE)
+export $(shell sed 's/=.*//' $(ENV_FILE))
+
+.PHONY: help build up down logs status clean restart \
+        up-db down-db up-kafka down-kafka sh-pg
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -16,25 +23,54 @@ help: ## Show this help message
 	@echo 'Targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-build: ## Build the Docker images
-	docker-compose -p $(PROJECT_NAME) -f $(DOCKER_COMPOSE_FILE) --env-file $(DOCKER_ENV_FILE) build
+#=====================================================
+# --- DB ---------------------------------------------
+#=====================================================
 
-up: ## Start the Docker containers
-	$(COMPOSE) up -d
+up-db: ## Start PostgreSQL service
+	$(COMPOSE_DB) up -d
 
-down: ## Stop and remove the Docker containers
-	$(COMPOSE) down
+down-db: ## Stop PostgreSQL service
+	$(COMPOSE_DB) down --remove-orphans
 
-logs: ## View the logs of the Docker containers
-	$(COMPOSE) logs -f
+sh-pg: ## Connect to PostgreSQL shell
+	$(COMPOSE_DB) exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
 
-status: ## Show the status of the Docker containers
-	docker-compose -p $(PROJECT_NAME) -f $(DOCKER_COMPOSE_FILE) --env-file $(DOCKER_ENV_FILE) ps
+#=====================================================
+# --- Kafka ------------------------------------------
+#=====================================================
 
-clean: ## Clean up containers and volumes for this project only`
-	docker-compose -p $(PROJECT_NAME) -f $(DOCKER_COMPOSE_FILE) --env-file $(DOCKER_ENV_FILE) down -v
+up-kafka: ## Start Kafka + Zookeeper
+	$(COMPOSE_KAFKA) up -d
 
-restart: down up
+down-kafka: ## Stop Kafka + Zookeeper
+	$(COMPOSE_KAFKA) down --remove-orphans
 
-sh-pg: ## Connect to the PostgreSQL container shell
-	$(COMPOSE) exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+#=====================================================
+# --- full -------------------------------------------
+#=====================================================
+
+up: ## Start entire stack
+	$(COMPOSE_ALL) up -d
+
+start: ## Start all containers
+	$(COMPOSE_ALL) start
+
+stop: ## Stop all containers
+	$(COMPOSE_ALL) stop
+
+build: ## Build images for full stack
+	$(COMPOSE_ALL) build
+
+logs: ## Show logs
+	$(COMPOSE_ALL) logs -f
+
+status: ## Show container status
+	$(COMPOSE_ALL) ps
+
+down: ## Stop + remove containers and volumes
+	$(COMPOSE_ALL) down -v --remove-orphans
+
+restart: ## Restart full stack
+	$(MAKE) down
+	$(MAKE) up
