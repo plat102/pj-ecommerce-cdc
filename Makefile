@@ -6,10 +6,12 @@ COMPOSE = docker-compose -p $(PROJECT_NAME) --env-file $(ENV_FILE)
 
 COMPOSE_DB := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.db.yml
 COMPOSE_KAFKA := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.kafka.yml
+COMPOSE_DBZ := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.debezium.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
-	-f $(DOCKER_DIR)/docker-compose.kafka.yml 
+	-f $(DOCKER_DIR)/docker-compose.kafka.yml \
+	-f $(DOCKER_DIR)/docker-compose.debezium.yml
 
 include $(ENV_FILE)
 export $(shell sed 's/=.*//' $(ENV_FILE))
@@ -74,3 +76,22 @@ down: ## Stop + remove containers and volumes
 restart: ## Restart full stack
 	$(MAKE) down
 	$(MAKE) up
+
+#=====================================================
+# --- Debezium ---------------------------------------
+#=====================================================
+
+up-debezium: ## Start Debezium service
+	$(COMPOSE) \
+		-f $(DOCKER_DIR)/docker-compose.kafka.yml \
+		-f $(DOCKER_DIR)/docker-compose.debezium.yml \
+		up -d debezium debezium-ui
+
+down-debezium: ## Stop Debezium service
+	$(COMPOSE) \
+		-f $(DOCKER_DIR)/docker-compose.debezium.yml \
+		down --remove-orphans debezium debezium-ui
+
+sh-debezium: ## Connect to Debezium shell
+	$(COMPOSE_DBZ) exec debezium bash
+	
