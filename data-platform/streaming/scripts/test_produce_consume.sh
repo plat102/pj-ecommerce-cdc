@@ -1,0 +1,44 @@
+#!/bin/bash
+TOPIC=${1:-test-topic}
+
+docker exec -it kafka1 \
+  kafka-console-producer \
+  --broker-list kafka1:9092 \
+  --topic "$TOPIC"
+
+
+docker exec -it kafka1 \
+  kafka-topics --create \
+  --topic test-topic \
+  --bootstrap-server kafka1:9092 \
+  --partitions 1 \
+  --replication-factor 1
+
+docker exec -it kafka1 \
+  kafka-topics --list \
+  --bootstrap-server kafka1:9092
+
+docker exec -it kafka1 \
+  kafka-console-producer \
+  --broker-list kafka1:9092 \
+  --topic test-topic
+
+#=====================================
+#!/bin/bash
+TOPIC=${1:-test-topic}
+GROUP=${2:-test-group}
+
+docker exec -it kafka1 \
+  kafka-console-consumer \
+  --bootstrap-server kafka1:9092 \
+  --topic "$TOPIC" \
+  --group "$GROUP" \
+  --from-beginning
+
+docker exec -it kafka1 \
+  kafka-console-consumer \
+  --bootstrap-server kafka1:9092 \
+  --topic test-topic \
+  --group test-consumer-group \
+  --from-beginning
+
