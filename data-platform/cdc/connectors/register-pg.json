@@ -1,0 +1,22 @@
+{
+  "name": "pg-connector-ecommerce",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "ecommerce",
+    "database.server.name": "ecommerce-server",
+    "topic.prefix": "pg",
+
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_slot",
+    
+    "table.include.list": "public.orders", 
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false"
+  }
+}

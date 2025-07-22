@@ -94,4 +94,8 @@ down-debezium: ## Stop Debezium service
 
 sh-debezium: ## Connect to Debezium shell
 	$(COMPOSE_DBZ) exec debezium bash
-	
+
+apply-pg-connector:
+	curl -X POST http://localhost:8083/connectors \
+		-H "Content-Type: application/json" \
+		-d @data-platform/cdc/connectors/register-pg.json
