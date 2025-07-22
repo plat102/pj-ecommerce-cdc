@@ -8,15 +8,27 @@ services:
     ports:
       - "8083:8083"  # Kafka Connect REST API
     environment:
+      # --- Kafka Connect settings ---
       BOOTSTRAP_SERVERS: kafka1:9092
       GROUP_ID: debezium-cluster
-      CONFIG_STORAGE_TOPIC: debezium_connect_configs
-      OFFSET_STORAGE_TOPIC: debezium_connect_offsets
-      STATUS_STORAGE_TOPIC: debezium_connect_statuses
+      CONFIG_STORAGE_TOPIC: debezium_connect_configs # Connector configuration storage topic
+      OFFSET_STORAGE_TOPIC: debezium_connect_offsets # Source connector offset storage topic
+      STATUS_STORAGE_TOPIC: debezium_connect_statuses # Connector status storage topic
+
+      # --- Converter settings ---
+      # Using simple JSON converters (no schema stored)
       KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
       CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+
+      # --- Alternative: Avro converters with schema registry ---
+      # KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      # VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      # CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      # CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+
+      # --- Debezium specific settings ---
       ENABLE_DEBEZIUM_SCRIPTING: "true"
       ENABLE_DEBEZIUM_KC_REST_EXTENSION: "true"
       CONNECT_REST_EXTENSION_CLASSES: io.debezium.kcrestextension.DebeziumConnectRestExtension
