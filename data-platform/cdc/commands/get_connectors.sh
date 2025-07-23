@@ -1,0 +1,1 @@
+curl -s http://host.docker.internal:8083/connectors
