@@ -59,6 +59,7 @@ sh-kafka: ## Connect to Kafka shell
 
 up: ## Start entire stack
 	$(COMPOSE_ALL) up -d
+	${MAKE} apply-pg-connector || echo "❌ Failed to apply PostgreSQL connector"
 
 start: ## Start all containers
 	$(COMPOSE_ALL) start
@@ -158,7 +159,11 @@ up-ui: ## Start CDC Testing UI as Docker service
 		up -d cdc-testing-ui
 
 down-ui: ## Stop CDC Testing UI Docker service
-	$(COMPOSE_UI) down --remove-orphans
+	$(COMPOSE) \
+		-f $(DOCKER_DIR)/docker-compose.db.yml \
+		-f $(DOCKER_DIR)/docker-compose.kafka.yml \
+		-f $(DOCKER_DIR)/docker-compose.ui.yml \
+	down cdc-testing-ui --remove-orphans
 
 build-ui: ## Build CDC Testing UI Docker image
 	$(COMPOSE) \
