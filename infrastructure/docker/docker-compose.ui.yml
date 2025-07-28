@@ -1,0 +1,17 @@
+services:
+  cdc-testing-ui:
+    build:
+      context: ../../
+      dockerfile: infrastructure/docker/streamlit/Dockerfile
+    container_name: cdc-testing-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ecommerce
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - KAFKA_BOOTSTRAP_SERVERS=kafka1:9092
+    networks:
+      - ecommerce-network

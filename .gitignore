@@ -1,1 +1,42 @@
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Python Virtual Environment
+venv/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Poetry
+poetry.lock
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

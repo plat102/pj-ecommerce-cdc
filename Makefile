@@ -7,11 +7,13 @@ COMPOSE = docker-compose -p $(PROJECT_NAME) --env-file $(ENV_FILE)
 COMPOSE_DB := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.db.yml
 COMPOSE_KAFKA := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.kafka.yml
 COMPOSE_DBZ := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.debezium.yml
+COMPOSE_UI := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.ui.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
 	-f $(DOCKER_DIR)/docker-compose.kafka.yml \
-	-f $(DOCKER_DIR)/docker-compose.debezium.yml
+	-f $(DOCKER_DIR)/docker-compose.debezium.yml \
+	-f $(DOCKER_DIR)/docker-compose.ui.yml
 
 include $(ENV_FILE)
 export $(shell sed 's/=.*//' $(ENV_FILE))
@@ -47,6 +49,9 @@ up-kafka: ## Start Kafka + Zookeeper
 
 down-kafka: ## Stop Kafka + Zookeeper
 	$(COMPOSE_KAFKA) down --remove-orphans
+
+sh-kafka: ## Connect to Kafka shell
+	$(COMPOSE_KAFKA) exec kafka1 bash
 
 #=====================================================
 # --- full -------------------------------------------
@@ -95,7 +100,94 @@ down-debezium: ## Stop Debezium service
 sh-debezium: ## Connect to Debezium shell
 	$(COMPOSE_DBZ) exec debezium bash
 
-apply-pg-connector:
+apply-pg-connector: ## Apply PostgreSQL CDC connector
 	curl -X POST http://localhost:8083/connectors \
 		-H "Content-Type: application/json" \
 		-d @data-platform/cdc/connectors/register-pg.json
+
+check-connector: ## Check connector status
+	@echo "📋 Checking connector status..."
+	@curl -s http://localhost:8083/connectors/pg-connector-ecommerce/status | python -m json.tool || echo "❌ Connector not found or Debezium not running"
+
+list-connectors: ## List all connectors
+	@echo "📋 Listing all connectors..."
+	@curl -s http://localhost:8083/connectors | python -m json.tool || echo "❌ Debezium not running"
+
+delete-connector: ## Delete PostgreSQL connector
+	@echo "🗑️ Deleting connector..."
+	@curl -X DELETE http://localhost:8083/connectors/pg-connector-ecommerce || echo "❌ Failed to delete connector"
+
+restart-connector: ## Restart PostgreSQL connector
+	@echo "🔄 Restarting connector..."
+	@curl -X POST http://localhost:8083/connectors/pg-connector-ecommerce/restart || echo "❌ Failed to restart connector"
+
+#=====================================================
+# --- Python Environment ----------------------------
+#=====================================================
+
+setup-venv: ## Setup Python virtual environment
+	./setup_venv.sh
+
+activate-venv: ## Show activation command
+	@echo "Run: source venv/bin/activate"
+
+clean-venv: ## Remove virtual environment
+	rm -rf venv
+
+install-deps: ## Install Python dependencies (requires active venv)
+	pip install -r requirements.txt
+
+freeze-deps: ## Freeze current dependencies
+	pip freeze > requirements.txt
+
+#=====================================================
+# --- Testing UI -------------------------------------
+#=====================================================
+
+run-ui-local: ## Start CDC Testing UI locally (requires active venv)
+	cd application/cdc-testing-ui && streamlit run app.py --server.port 8501
+
+check-ui-deps: ## Check if UI dependencies are installed
+	python -c "import streamlit, psycopg2, kafka, pandas, plotly; print('✅ All dependencies installed')"
+
+up-ui: ## Start CDC Testing UI as Docker service
+	$(COMPOSE) \
+		-f $(DOCKER_DIR)/docker-compose.db.yml \
+		-f $(DOCKER_DIR)/docker-compose.kafka.yml \
+		-f $(DOCKER_DIR)/docker-compose.ui.yml \
+		up -d cdc-testing-ui
+
+down-ui: ## Stop CDC Testing UI Docker service
+	$(COMPOSE_UI) down --remove-orphans
+
+build-ui: ## Build CDC Testing UI Docker image
+	$(COMPOSE) \
+		-f $(DOCKER_DIR)/docker-compose.db.yml \
+		-f $(DOCKER_DIR)/docker-compose.kafka.yml \
+		-f $(DOCKER_DIR)/docker-compose.ui.yml \
+	build  cdc-testing-ui
+
+
+logs-ui: ## Show CDC Testing UI logs
+	$(COMPOSE_UI) logs -f
+
+demo-data: ## Generate demo data for CDC testing (requires active venv)
+	cd application/cdc-testing-ui && python demo_data.py
+
+quick-start: ## Quick start for development (up + connector + demo data + ui)
+	@echo "🚀 Starting CDC development environment..."
+	$(MAKE) up
+	@echo "⏳ Waiting for services to be ready..."
+	@sleep 15
+	@echo "🔌 Applying PostgreSQL connector..."
+	$(MAKE) apply-pg-connector
+	@echo "⏳ Waiting for connector to be ready..."
+	@sleep 5
+	@echo "📊 Checking connector status..."
+	$(MAKE) check-connector
+	@echo "🎲 Generating demo data..."
+	$(MAKE) demo-data
+	@echo "✅ Setup completed!"
+	@echo "🌐 Access the UI at: http://localhost:8501"
+	@echo "🔧 Debezium UI: http://localhost:8085"
+	@echo "📡 Kafka Console: http://localhost:8080"
