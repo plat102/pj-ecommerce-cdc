@@ -31,3 +31,8 @@ INSERT INTO customers (name, email) VALUES
 INSERT INTO products (name, price) VALUES
 ('Laptop', 1200.00),
 ('Phone', 700.00);
+
+-- Set replica identity for logical replication
+ALTER TABLE customers REPLICA IDENTITY FULL;
+ALTER TABLE products REPLICA IDENTITY FULL;
+ALTER TABLE orders REPLICA IDENTITY FULL;
