@@ -40,3 +40,40 @@ poetry.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Spark
+infrastructure/docker/spark/data/
+infrastructure/docker/spark/logs/
+infrastructure/docker/spark/events/
+infrastructure/docker/spark/work/
+infrastructure/docker/spark/jars/*.jar
+!infrastructure/docker/spark/jars/.gitkeep
+
+# Jupyter
+data-platform/streaming/spark/notebooks/.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Kafka/Debezium data
+data/
+logs/
+*.log.*
+
+# Database dumps
+*.sql
+*.dump
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Application specific
+data-platform/streaming/spark/checkpoints/
+data-platform/streaming/spark/output/
+
+# Volume mounts (runtime data)
+volumes/

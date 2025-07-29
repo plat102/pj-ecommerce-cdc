@@ -8,18 +8,22 @@ COMPOSE_DB := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.db.yml
 COMPOSE_KAFKA := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.kafka.yml
 COMPOSE_DBZ := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.debezium.yml
 COMPOSE_UI := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.ui.yml
+COMPOSE_SPARK := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.spark.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
 	-f $(DOCKER_DIR)/docker-compose.kafka.yml \
 	-f $(DOCKER_DIR)/docker-compose.debezium.yml \
-	-f $(DOCKER_DIR)/docker-compose.ui.yml
+	-f $(DOCKER_DIR)/docker-compose.ui.yml \
+	-f $(DOCKER_DIR)/docker-compose.spark.yml
 
 include $(ENV_FILE)
 export $(shell sed 's/=.*//' $(ENV_FILE))
 
 .PHONY: help build up down logs status clean restart \
-        up-db down-db up-kafka down-kafka sh-pg
+        up-db down-db up-kafka down-kafka sh-pg \
+        up-spark down-spark logs-spark status-spark sh-spark-master \
+        restart-spark spark-shell pyspark-shell spark-submit jupyter-token
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -196,3 +200,41 @@ quick-start: ## Quick start for development (up + connector + demo data + ui)
 	@echo "🌐 Access the UI at: http://localhost:8501"
 	@echo "🔧 Debezium UI: http://localhost:8085"
 	@echo "📡 Kafka Console: http://localhost:8080"
+
+#=====================================================
+# --- Spark ------------------------------------------
+#=====================================================
+
+up-spark: ## Start Spark cluster
+	$(COMPOSE_SPARK) up -d
+
+down-spark: ## Stop Spark cluster
+	$(COMPOSE_SPARK) down --remove-orphans
+
+logs-spark: ## Show Spark logs
+	$(COMPOSE_SPARK) logs -f
+
+status-spark: ## Show Spark container status
+	$(COMPOSE_SPARK) ps
+
+sh-spark-master: ## Connect to Spark master shell
+	$(COMPOSE_SPARK) exec spark-standalone bash
+
+sh-spark-worker: ## Connect to Spark worker shell  
+	$(COMPOSE_SPARK) exec spark-standalone bash
+
+restart-spark: ## Restart Spark cluster
+	$(MAKE) down-spark
+	$(MAKE) up-spark
+
+spark-shell: ## Start Spark shell
+	$(COMPOSE_SPARK) exec spark-standalone spark-shell --master spark://spark-standalone:7077
+
+pyspark-shell: ## Start PySpark shell
+	$(COMPOSE_SPARK) exec spark-standalone pyspark --master spark://spark-standalone:7077
+
+spark-submit: ## Submit a Spark application (use: make spark-submit APP=your-app.py)
+	$(COMPOSE_SPARK) exec spark-standalone spark-submit --master spark://spark-standalone:7077 /opt/spark-apps/$(APP)
+
+jupyter-token: ## Get Jupyter notebook token
+	$(COMPOSE_SPARK) exec jupyter-spark jupyter lab list
