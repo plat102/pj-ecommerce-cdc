@@ -4,7 +4,7 @@ services:
     container_name: debezium
     depends_on:
       - kafka1
-      - schema-registry
+      # - schema-registry
     ports:
       - "8083:8083"  # Kafka Connect REST API
     environment:

@@ -35,7 +35,7 @@ services:
       - "8080:8080"
     depends_on:
       - kafka1
-      - schema-registry
+      # - schema-registry
     environment:
       # KAFKA_BROKERS: kafka1:9092
       # CONSOLE_LISTEN_PORT: 8080
@@ -46,18 +46,18 @@ services:
     networks:
       - ecommerce-network
 
-  schema-registry:
-    image: confluentinc/cp-schema-registry:${KAFKA_IMAGE_TAG:-7.8.2}
-    container_name: schema-registry
-    depends_on:
-      - kafka1
-    ports:
-      - "8081:8081"
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:9092
-    networks:
-      - ecommerce-network
+  # schema-registry:
+  #   image: confluentinc/cp-schema-registry:${KAFKA_IMAGE_TAG:-7.8.2}
+  #   container_name: schema-registry
+  #   depends_on:
+  #     - kafka1
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     SCHEMA_REGISTRY_HOST_NAME: schema-registry
+  #     SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:9092
+  #   networks:
+  #     - ecommerce-network
 
 networks:
   ecommerce-network:
