@@ -1,56 +1,25 @@
 services:
-  spark-standalone:
-    image: bitnami/spark:${SPARK_IMAGE_TAG:-3.5.3}
-    container_name: spark-standalone
-    hostname: spark-standalone
-    ports:
-      - "8085:8080"  # Spark Master Web UI
-      - "7077:7077"  # Spark Master port
-      - "8081:8081"  # Spark Worker Web UI (same container)
-    environment:
-      - SPARK_MODE=master
-      - SPARK_WORKER_MEMORY=1g
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-      - SPARK_USER=spark
-    volumes:
-      - ./spark/conf:/opt/bitnami/spark/conf
-      - ./spark/jars:/opt/bitnami/spark/ivy
-      - ../../data-platform/streaming/spark/apps:/opt/spark-apps
-      - ./spark/data:/opt/spark-data
-    networks:
-      - ecommerce-network
-    command: >
-      bash -c "
-      /opt/bitnami/scripts/spark/entrypoint.sh /opt/bitnami/scripts/spark/run.sh &
-      sleep 10 &&
-      SPARK_MODE=worker SPARK_MASTER_URL=spark://spark-standalone:7077 /opt/bitnami/scripts/spark/run.sh &
-      wait
-      "
-
-  jupyter-spark:
-    image: jupyter/pyspark-notebook:${JUPYTER_SPARK_TAG:-x86_64-spark-3.5.0}
-    container_name: jupyter-spark
+  ed-pyspark-jupyter:
+    image: easewithdata/pyspark-jupyter-lab
+    user: root
+    container_name: ed-pyspark-jupyter
     ports:
       - "8888:8888"  # Jupyter Lab
+      - "4040:4040"  # Spark UI
     environment:
-      - JUPYTER_ENABLE_LAB=yes
-      - GRANT_SUDO=yes
-      - SPARK_MASTER=spark://spark-standalone:7077
+      JUPYTER_PORT: 8888
+      SPARK_UI_PORT: 4040
+      GRANT_SUDO: yes
     volumes:
-      - ../../data-platform/streaming/spark/notebooks:/home/jovyan/work
-      - ./spark/data:/home/jovyan/data
-      - ../../data-platform/streaming/spark/apps:/home/jovyan/apps
-    depends_on:
-      - spark-standalone
+      - streaming_data:/data:rw
+      - ./spark/data:/home/jupyter/data
+      - ../../data-platform/streaming:/home/jupyter/src-streaming
+      
     networks:
       - ecommerce-network
 
 volumes:
-  spark_data:
+  streaming_data:
     driver: local
 
 networks:
