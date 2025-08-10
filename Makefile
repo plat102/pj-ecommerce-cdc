@@ -139,8 +139,31 @@ activate-venv: ## Show activation command
 clean-venv: ## Remove virtual environment
 	rm -rf venv
 
-install-deps: ## Install Python dependencies (requires active venv)
+check-venv: ## Check if virtual environment is active
+	@if [ -z "$$VIRTUAL_ENV" ]; then \
+		echo "❌ Virtual environment is not active"; \
+		echo "💡 Run: source venv/bin/activate"; \
+		exit 1; \
+	else \
+		echo "✅ Virtual environment is active: $$VIRTUAL_ENV"; \
+	fi
+
+install-deps: check-venv ## Install Python dependencies (requires active venv)
 	pip install -r requirements.txt
+
+install-system-pip: ## Install pip system-wide (Ubuntu/Debian)
+	sudo apt update && sudo apt install python3-pip -y
+
+setup-python: ## Setup complete Python environment (system pip + venv + deps)
+	@echo "🐍 Setting up complete Python environment..."
+	@if ! command -v pip3 >/dev/null 2>&1; then \
+		echo "📦 Installing pip..."; \
+		sudo apt update && sudo apt install python3-pip -y; \
+	fi
+	@echo "📁 Setting up virtual environment..."
+	$(MAKE) setup-venv
+	@echo "✅ Python environment ready!"
+	@echo "💡 To activate: source venv/bin/activate"
 
 freeze-deps: ## Freeze current dependencies
 	pip freeze > requirements.txt
@@ -205,36 +228,36 @@ quick-start: ## Quick start for development (up + connector + demo data + ui)
 # --- Spark ------------------------------------------
 #=====================================================
 
-up-spark: ## Start Spark cluster
+up-spark: ## Start Spark + Jupyter service
 	$(COMPOSE_SPARK) up -d
 
-down-spark: ## Stop Spark cluster
+down-spark: ## Stop Spark + Jupyter service
 	$(COMPOSE_SPARK) down --remove-orphans
 
-logs-spark: ## Show Spark logs
+logs-spark: ## Show Spark + Jupyter logs
 	$(COMPOSE_SPARK) logs -f
 
-status-spark: ## Show Spark container status
+status-spark: ## Show Spark + Jupyter container status
 	$(COMPOSE_SPARK) ps
 
-sh-spark-master: ## Connect to Spark master shell
-	$(COMPOSE_SPARK) exec spark-standalone bash
+sh-spark: ## Connect to Spark + Jupyter container shell
+	$(COMPOSE_SPARK) exec ed-pyspark-jupyter bash
 
-sh-spark-worker: ## Connect to Spark worker shell  
-	$(COMPOSE_SPARK) exec spark-standalone bash
-
-restart-spark: ## Restart Spark cluster
+restart-spark: ## Restart Spark + Jupyter service
 	$(MAKE) down-spark
 	$(MAKE) up-spark
 
-spark-shell: ## Start Spark shell
-	$(COMPOSE_SPARK) exec spark-standalone spark-shell --master spark://spark-standalone:7077
+spark-shell: ## Start Spark shell in container
+	$(COMPOSE_SPARK) exec ed-pyspark-jupyter spark-shell
 
-pyspark-shell: ## Start PySpark shell
-	$(COMPOSE_SPARK) exec spark-standalone pyspark --master spark://spark-standalone:7077
+pyspark-shell: ## Start PySpark shell in container
+	$(COMPOSE_SPARK) exec ed-pyspark-jupyter pyspark
 
 spark-submit: ## Submit a Spark application (use: make spark-submit APP=your-app.py)
-	$(COMPOSE_SPARK) exec spark-standalone spark-submit --master spark://spark-standalone:7077 /opt/spark-apps/$(APP)
+	$(COMPOSE_SPARK) exec ed-pyspark-jupyter spark-submit /home/jupyter/src-streaming/$(APP)
 
-jupyter-token: ## Get Jupyter notebook token
-	$(COMPOSE_SPARK) exec jupyter-spark jupyter lab list
+jupyter-token: ## Get Jupyter notebook access info
+	@echo "🔗 Jupyter Lab URL: http://localhost:8888"
+	@echo "🔗 Spark UI URL: http://localhost:4040"
+	@echo "💡 Default setup should not require token"
+	$(COMPOSE_SPARK) exec ed-pyspark-jupyter jupyter lab list 2>/dev/null || echo "ℹ️  Container may not be running"
