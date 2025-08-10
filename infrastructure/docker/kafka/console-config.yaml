@@ -10,7 +10,7 @@ kafka:
   # Schema Registry configuration (top-level)
   #----------------------------------------------------------------------------
   schemaRegistry:
-    enabled: true
+    enabled: false # Set to true if want to use Schema Registry
     urls:
       - http://schema-registry:8081
 
