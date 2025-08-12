@@ -63,8 +63,10 @@ logs/
 *.log.*
 
 # Database dumps
-*.sql
 *.dump
+*_dump.sql
+backup_*.sql
+export_*.sql
 
 # Temporary files
 tmp/
