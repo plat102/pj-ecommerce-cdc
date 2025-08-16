@@ -301,3 +301,10 @@ analytics-info: ## Show all analytics service URLs
 	@echo "🔗 Grafana Dashboard: http://localhost:3000 (admin/admin123)"
 	@echo "🗄️  ClickHouse HTTP: http://localhost:8123"
 	@echo "⚡ ClickHouse Native: localhost:9000"
+
+#=====================================================
+# --- CDC Spark Jobs ---------------------------------
+#=====================================================
+
+cdc-run: ## Run CDC customers job (simple command)
+	@./scripts/run_cdc.sh
