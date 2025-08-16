@@ -105,11 +105,19 @@ class CDCProcessor:
             schemas.get_customers_value_schema()
         )
         
-        # Transform to target format
-        transformed_df = CDCTransformer.transform_customers_cdc(cdc_df)
+        # Transform to target format based on mode
+        if self.config.debug_mode:
+            # Debug mode: include operation column for debugging
+            transformed_df = CDCTransformer.transform_customers_cdc_for_debug(cdc_df)
+            # Add processing metadata for debugging
+            final_df = CDCTransformer.add_processing_metadata(transformed_df)
+        else:
+            # Production mode: exclude operation column for ClickHouse
+            transformed_df = CDCTransformer.transform_customers_cdc_for_clickhouse(cdc_df)
+            # No metadata in production mode - ClickHouse schema doesn't include processed_at
+            final_df = transformed_df
         
-        # Add processing metadata and filter valid records
-        final_df = CDCTransformer.add_processing_metadata(transformed_df)
+        # Filter valid records
         final_df = CDCTransformer.filter_valid_records(final_df)
         
         return final_df

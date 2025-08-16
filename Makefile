@@ -306,5 +306,11 @@ analytics-info: ## Show all analytics service URLs
 # --- CDC Spark Jobs ---------------------------------
 #=====================================================
 
-cdc-run: ## Run CDC customers job (simple command)
+cdc-run: ## Run CDC customers job (debug mode - console output)
+	@./scripts/run_cdc.sh --debug
+
+cdc-run-prod: ## Run CDC customers job (production mode - to ClickHouse)
 	@./scripts/run_cdc.sh
+
+cdc-debug: ## Run CDC customers job (debug mode - console output)
+	@./scripts/run_cdc.sh --debug
