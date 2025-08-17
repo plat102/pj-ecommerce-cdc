@@ -306,6 +306,7 @@ analytics-info: ## Show all analytics service URLs
 # --- CDC Spark Jobs ---------------------------------
 #=====================================================
 
+# Customers CDC Jobs
 cdc-run: ## Run CDC customers job (debug mode - console output)
 	@./scripts/run_cdc.sh --debug
 
@@ -314,3 +315,32 @@ cdc-run-prod: ## Run CDC customers job (production mode - to ClickHouse)
 
 cdc-debug: ## Run CDC customers job (debug mode - console output)
 	@./scripts/run_cdc.sh --debug
+
+# Products CDC Jobs
+cdc-products-debug: ## Run CDC products job (debug mode - console output)
+	@./scripts/run_cdc_job.sh products --debug
+
+cdc-products-prod: ## Run CDC products job (production mode - to ClickHouse)
+	@./scripts/run_cdc_job.sh products
+
+# Orders CDC Jobs
+cdc-orders-debug: ## Run CDC orders job (debug mode - console output)
+	@./scripts/run_cdc_job.sh orders --debug
+
+cdc-orders-prod: ## Run CDC orders job (production mode - to ClickHouse)
+	@./scripts/run_cdc_job.sh orders
+
+# Multi-table CDC Jobs
+cdc-all-debug: ## Run all CDC jobs in debug mode
+	@echo "🚀 Starting all CDC jobs in debug mode..."
+	@echo "💡 Note: Run each job in separate terminals for parallel execution"
+	@echo "🔧 Customers: make cdc-debug"
+	@echo "📦 Products: make cdc-products-debug"
+	@echo "📋 Orders: make cdc-orders-debug"
+
+cdc-all-prod: ## Run all CDC jobs in production mode
+	@echo "🚀 Starting all CDC jobs in production mode..."
+	@echo "💡 Note: Run each job in separate terminals for parallel execution"
+	@echo "🔧 Customers: make cdc-run-prod"
+	@echo "📦 Products: make cdc-products-prod"
+	@echo "📋 Orders: make cdc-orders-prod"
