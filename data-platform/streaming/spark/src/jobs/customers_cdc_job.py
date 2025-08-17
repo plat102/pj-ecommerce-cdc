@@ -8,8 +8,8 @@ from typing import Optional
 
 from src.config.app_config import AppConfig
 from src.schemas.cdc_schemas import CDCSchemas
-from src.common.kafka_client import KafkaReader
-from src.common.clickhouse_client import ClickHouseWriter
+from src.io.kafka_client import KafkaReader
+from src.io.clickhouse_client import ClickHouseWriter
 from src.transformations.kafka_parser import KafkaMessageParser
 from src.transformations.cdc_transformer import CDCTransformer
 from src.utils.helpers import validate_config
