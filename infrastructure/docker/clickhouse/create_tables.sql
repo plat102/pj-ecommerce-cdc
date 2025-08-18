@@ -19,3 +19,15 @@ CREATE TABLE IF NOT EXISTS ecommerce_analytics.products_cdc (
     _deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(_version)
 ORDER BY id;
+
+-- Orders CDC table
+CREATE TABLE ecommerce_analytics.orders_cdc (
+    id Int64,
+    customer_id Int64,
+    product_id Int64,
+    quantity Int32,
+    order_time Int64,
+    _version UInt64,
+    _deleted UInt8 DEFAULT 0
+) ENGINE = ReplacingMergeTree(_version)
+ORDER BY id;
