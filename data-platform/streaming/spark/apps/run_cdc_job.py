@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.jobs.customers_cdc_job import CDCProcessor
+from src.jobs.product_cdc_job import ProductCDCJob
 from src.config.app_config import AppConfig
 
 logging.basicConfig(
@@ -51,20 +52,30 @@ def main():
     logger.info(f"Kafka servers: {config.kafka.bootstrap_servers}")
     logger.info(f"ClickHouse URL: {config.clickhouse.jdbc_url}")
     
-    # Create and run processor
-    processor = CDCProcessor(config)
-    
+    # Create processor based on job type
     try:
-        processor.start_streaming()
-        processor.wait_for_termination()
-        
+        if args.job_type == 'customers':
+            processor = CDCProcessor(config)
+            processor.start_streaming()
+            processor.wait_for_termination()
+        elif args.job_type == 'products':
+            job = ProductCDCJob(config)
+            job.start_streaming(process_func=job.process, table_name="products_cdc")
+            job.wait_for_termination()
+        else:
+            raise ValueError(f"Unsupported job type: {args.job_type}")
+            
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
     except Exception as e:
         logger.error(f"Job failed: {e}")
         sys.exit(1)
     finally:
-        processor.stop_streaming()
+        # Cleanup based on job type
+        if args.job_type == 'customers' and 'processor' in locals():
+            processor.stop_streaming()
+        elif args.job_type == 'products' and 'job' in locals():
+            job.stop_streaming()
 
 
 if __name__ == "__main__":
