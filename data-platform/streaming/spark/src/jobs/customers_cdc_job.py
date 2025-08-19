@@ -12,6 +12,7 @@ from src.io.kafka_client import KafkaReader
 from src.io.clickhouse_client import ClickHouseWriter
 from src.transformations.kafka_parser import KafkaMessageParser
 from src.transformations.cdc_transformer import CDCTransformer
+from src.transformations.customers_cdc_transformer import CustomersCDCTransformer
 from src.utils.helpers import validate_config
 
 # Setup logging
@@ -108,17 +109,17 @@ class CDCProcessor:
         # Transform to target format based on mode
         if self.config.debug_mode:
             # Debug mode: include operation column for debugging
-            transformed_df = CDCTransformer.transform_customers_cdc_for_debug(cdc_df)
+            transformed_df = CustomersCDCTransformer.transform_customers_cdc_for_debug(cdc_df)
             # Add processing metadata for debugging
-            final_df = CDCTransformer.add_processing_metadata(transformed_df)
+            final_df = CustomersCDCTransformer.add_processing_metadata(transformed_df)
         else:
             # Production mode: exclude operation column for ClickHouse
-            transformed_df = CDCTransformer.transform_customers_cdc_for_clickhouse(cdc_df)
+            transformed_df = CustomersCDCTransformer.transform_customers_cdc_for_clickhouse(cdc_df)
             # No metadata in production mode - ClickHouse schema doesn't include processed_at
             final_df = transformed_df
         
         # Filter valid records
-        final_df = CDCTransformer.filter_valid_records(final_df)
+        final_df = CustomersCDCTransformer.filter_valid_records(final_df)
         
         return final_df
     
