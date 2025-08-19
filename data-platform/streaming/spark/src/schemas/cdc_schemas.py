@@ -35,3 +35,33 @@ class CDCSchemas:
             StructField("op", StringType(), True),
             StructField("ts_ms", LongType(), True)
         ])
+
+    @staticmethod
+    def get_products_value_schema():
+        """Get products value schema"""
+        product_record_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("name", StringType(), True),
+            StructField("price", StringType(), True),
+            StructField("created_at", LongType(), True)
+        ])
+        
+        return StructType([
+            StructField("before", product_record_schema, True),
+            StructField("after", product_record_schema, True),
+            StructField("source", StructType([
+                StructField("ts_ms", LongType(), True),
+                StructField("schema", StringType(), True),
+                StructField("table", StringType(), True)
+            ]), True),
+            StructField("op", StringType(), True),
+            StructField("ts_ms", LongType(), True)
+        ])
+    
+    @staticmethod
+    def get_orders_value_schema():
+        """Get orders value schema"""
+        # TODO
+        pass
+    
+    

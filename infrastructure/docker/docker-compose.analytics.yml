@@ -11,6 +11,7 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse123}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     networks:
       - ecommerce-network
     ulimits:

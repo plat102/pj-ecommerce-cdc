@@ -64,6 +64,58 @@ jupyter lab notebooks/ecom_cdc_processing.ipynb
 ./scripts/submit_job.sh --job-type customers --master yarn
 ```
 
+### Sample code flow
+```txt
+config → I/O → schema → transformations → job orchestration
+```
+Components:
+1. Job entrypoint → lives in apps/.
+2. Job orchestration → in jobs/, extends BaseJob.
+3. I/O connectors → in io/ (Kafka, ClickHouse, DB, etc).
+4. Schemas → in schemas/ (clear contracts, no inferSchema).
+5. Transformations → in transformations/, stateless & testable.
+6. Utils & logging → in utils/.
+7. Config → in config/, always externalized (YAML/env).
+
+This pattern ensures separation of concerns, maintainability, and scalability for Spark jobs in production.
+
+Common coding flow:
+
+```md
+Config
+
+    Load environment configs (dev/staging/prod).
+    Example: Kafka topic, DB URL, checkpoint path, batch interval…
+    👉 Centralize in config/app_config.py.
+
+I/O (Input)
+
+    Read data from source (Kafka, S3, DB, HDFS).
+    👉 Put all connectors in io/ (e.g. kafka_client.py).
+
+Schema
+
+    Apply predefined schema (StructType) to raw input.
+    Avoid inferSchema in production (not safe).
+    👉 Define in schemas/.
+
+Transformations
+
+    Business logic (cleaning, enrichment, aggregations).
+    Keep them stateless, testable, reusable.
+    👉 Store in transformations/.
+
+I/O (Output)
+
+    Write results to sink (ClickHouse, S3, Parquet, etc).
+    👉 Again via io/ layer.
+
+Job orchestration
+
+    Glue all above steps together in jobs/.
+    Job = Config + I/O (in) + Schema + Transformations + I/O (out).
+    👉 Example: OrdersJob in jobs/orders_job.py.
+```
 ## 📊 **Monitoring**
 
 - **Spark UI**: `http://driver:4040`

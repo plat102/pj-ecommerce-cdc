@@ -5,23 +5,29 @@ set -e
 
 # Parse arguments
 DEBUG_MODE="false"
+JOB_TYPE="customers"
 while [[ $# -gt 0 ]]; do
     case $1 in
         --debug)
             DEBUG_MODE="true"
             shift
             ;;
+        --job-type)
+            JOB_TYPE="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option $1"
+            echo "Usage: $0 [--debug] [--job-type customers|products]"
             exit 1
             ;;
     esac
 done
 
 if [ "$DEBUG_MODE" = "true" ]; then
-    echo "� Starting CDC Customers Job (Debug Mode - Console Output)..."
+    echo "🐛 Starting CDC $JOB_TYPE Job (Debug Mode - Console Output)..."
 else
-    echo "�🚀 Starting CDC Customers Job (Production Mode - ClickHouse)..."
+    echo "🚀 Starting CDC $JOB_TYPE Job (Production Mode - ClickHouse)..."
 fi
 
 # Check if Spark container is running
@@ -39,9 +45,9 @@ echo "🔄 Running CDC job..."
 
 # Run the CDC job with appropriate mode
 if [ "$DEBUG_MODE" = "true" ]; then
-    docker exec ed-pyspark-jupyter bash -c "cd /home/jupyter/src-streaming/spark && ./scripts/submit_job.sh --job-type customers --debug"
+    docker exec ed-pyspark-jupyter bash -c "cd /home/jupyter/src-streaming/spark && ./scripts/submit_job.sh --job-type $JOB_TYPE --debug"
 else
-    docker exec ed-pyspark-jupyter bash -c "cd /home/jupyter/src-streaming/spark && ./scripts/submit_job.sh --job-type customers"
+    docker exec ed-pyspark-jupyter bash -c "cd /home/jupyter/src-streaming/spark && ./scripts/submit_job.sh --job-type $JOB_TYPE"
 fi
 
 echo "✅ CDC job completed!"

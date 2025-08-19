@@ -312,5 +312,51 @@ cdc-run: ## Run CDC customers job (debug mode - console output)
 cdc-run-prod: ## Run CDC customers job (production mode - to ClickHouse)
 	@./scripts/run_cdc.sh
 
-cdc-debug: ## Run CDC customers job (debug mode - console output)
-	@./scripts/run_cdc.sh --debug
+cdc-run-products: ## Run CDC products job (debug mode - console output)
+	@./scripts/run_cdc.sh --job-type products --debug
+
+cdc-run-products-prod: ## Run CDC products job (production mode - to ClickHouse)
+	@./scripts/run_cdc.sh --job-type products
+
+cdc-run-all: ## Run both customers and products CDC jobs (debug mode)
+	@echo "🚀 Running both CDC jobs in background..."
+	@./scripts/run_cdc.sh --job-type customers --debug &
+	@echo "⏳ Waiting 5 seconds before starting products job..."
+	@sleep 5
+	@./scripts/run_cdc.sh --job-type products --debug &
+	@echo "✅ Both jobs started! Use 'docker logs -f ed-pyspark-jupyter' to see output"
+	@echo "🛑 To stop: docker exec ed-pyspark-jupyter pkill -f 'spark-submit'"
+
+cdc-run-all-prod: ## Run both customers and products CDC jobs (production mode - to ClickHouse)
+	@echo "🚀 Running both CDC jobs in production mode..."
+	@./scripts/run_cdc.sh --job-type customers &
+	@echo "⏳ Waiting 5 seconds before starting products job..."
+	@sleep 5
+	@./scripts/run_cdc.sh --job-type products &
+	@echo "✅ Both jobs started in production mode!"
+	@echo "🛑 To stop: docker exec ed-pyspark-jupyter pkill -f 'spark-submit'"
+
+cdc-stop: ## Stop all CDC jobs
+	@echo "🛑 Stopping all CDC jobs..."
+	@docker exec ed-pyspark-jupyter pkill -f 'spark-submit' || echo "ℹ️  No spark-submit processes"
+	@docker exec ed-pyspark-jupyter pkill -f 'pyspark' || echo "ℹ️  No pyspark processes"
+	@docker exec ed-pyspark-jupyter pkill -f 'java.*spark' || echo "ℹ️  No Java Spark processes"
+	@echo "✅ All CDC jobs stopped!"
+
+cdc-force-stop: ## Force stop all CDC jobs and restart Spark container
+	@echo "💀 Force stopping all CDC jobs..."
+	@docker exec ed-pyspark-jupyter pkill -9 -f 'spark' || echo "ℹ️  No Spark processes"
+	@echo "🔄 Restarting Spark container only..."
+	@docker restart ed-pyspark-jupyter
+	@echo "⏳ Waiting for container to be ready..."
+	@sleep 5
+	@echo "✅ All processes killed and Spark container restarted!"
+
+cdc-status: ## Check CDC jobs status
+	@echo "📊 Checking CDC jobs status..."
+	@docker exec ed-pyspark-jupyter pgrep -f 'spark-submit' > /dev/null && echo "✅ spark-submit jobs are running" || echo "❌ No spark-submit jobs"
+	@docker exec ed-pyspark-jupyter pgrep -f 'java.*spark' > /dev/null && echo "✅ Java Spark processes are running" || echo "❌ No Java Spark processes"
+	@echo "📋 All Spark-related processes:"
+	@docker exec ed-pyspark-jupyter pgrep -fl 'spark' || echo "   None"
+
+
