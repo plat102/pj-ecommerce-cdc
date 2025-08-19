@@ -28,3 +28,4 @@ class BaseJob:
             f"Spark session created with app name: {self.config.spark.app_name}\
                 (id: {self.spark.sparkContext.applicationId})"
         )
+        return self.spark

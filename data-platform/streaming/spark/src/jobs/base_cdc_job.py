@@ -17,14 +17,21 @@ class BaseCDCJob(BaseStreamingJob):
         self.kafka_reader: KafkaReader = None
         self.clickhouse_writer: ClickHouseWriter = None
         
-    def create_spark_sessions(self):
+    def create_spark_session(self):
         """Extend to init Kafka + ClickHouse"""
         spark = super().create_spark_session()
+        
+        # Ensure self.spark is set
+        self.spark = spark
+        
+        # Initialize clients with spark session
+        logger.info(f"Initializing KafkaReader with spark: {spark}")
         self.kafka_reader = KafkaReader(spark, self.config.kafka.bootstrap_servers)
         self.clickhouse_writer = ClickHouseWriter(
             self.config.clickhouse.jdbc_url,
             self.config.clickhouse.connection_properties
         )
+        logger.info(f"KafkaReader initialized: {self.kafka_reader}")
         return spark
 
     def read_kafka_stream(self, topic: str) -> DataFrame:
