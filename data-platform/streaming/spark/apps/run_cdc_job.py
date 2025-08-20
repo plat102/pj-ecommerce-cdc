@@ -12,6 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from src.jobs.customers_cdc_job import CDCProcessor
 from src.jobs.product_cdc_job import ProductCDCJob
+from src.jobs.order_cdc_job import OrderCDCJob
 from src.config.app_config import AppConfig
 
 logging.basicConfig(
@@ -62,6 +63,10 @@ def main():
             job = ProductCDCJob(config)
             job.start_streaming(process_func=job.process, table_name="products_cdc")
             job.wait_for_termination()
+        elif args.job_type == 'orders':
+            job = OrderCDCJob(config)
+            job.start_streaming(process_func=job.process, table_name="orders_cdc")
+            job.wait_for_termination()
         else:
             raise ValueError(f"Unsupported job type: {args.job_type}")
             
@@ -75,6 +80,8 @@ def main():
         if args.job_type == 'customers' and 'processor' in locals():
             processor.stop_streaming()
         elif args.job_type == 'products' and 'job' in locals():
+            job.stop_streaming()
+        elif args.job_type == 'orders' and 'job' in locals():
             job.stop_streaming()
 
 
