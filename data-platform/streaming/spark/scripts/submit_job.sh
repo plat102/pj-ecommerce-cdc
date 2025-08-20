@@ -49,7 +49,7 @@ spark-submit \
     --packages $PACKAGES \
     --conf spark.streaming.stopGracefullyOnShutdown=true \
     --conf spark.sql.shuffle.partitions=8 \
-    --py-files src/schemas/cdc_schemas.py,src/utils/helpers.py,src/config/app_config.py,src/jobs/customers_cdc_job.py,src/jobs/product_cdc_job.py \
+    --py-files src/schemas/cdc_schemas.py,src/utils/helpers.py,src/config/app_config.py,src/jobs/customers_cdc_job.py,src/jobs/product_cdc_job.py,src/jobs/order_cdc_job.py \
     apps/run_cdc_job.py \
     --job-type $JOB_TYPE \
     $([ "$DEBUG_MODE" = "true" ] && echo "--debug")
