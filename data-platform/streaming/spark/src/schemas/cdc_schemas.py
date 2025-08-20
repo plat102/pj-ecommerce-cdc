@@ -61,7 +61,24 @@ class CDCSchemas:
     @staticmethod
     def get_orders_value_schema():
         """Get orders value schema"""
-        # TODO
-        pass
+        order_record_schema = StructType([
+            StructField("id", IntegerType(), True),
+            StructField("customer_id", IntegerType(), True),
+            StructField("product_id", IntegerType(), True),
+            StructField("quantity", IntegerType(), True),
+            StructField("order_time", LongType(), True)
+        ])
+        
+        return StructType([
+            StructField("before", order_record_schema, True),
+            StructField("after", order_record_schema, True),
+            StructField("source", StructType([
+                StructField("ts_ms", LongType(), True),
+                StructField("schema", StringType(), True),
+                StructField("table", StringType(), True)
+            ]), True),
+            StructField("op", StringType(), True),
+            StructField("ts_ms", LongType(), True)
+        ])
     
     

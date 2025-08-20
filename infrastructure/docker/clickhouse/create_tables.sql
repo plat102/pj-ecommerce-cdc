@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS ecommerce_analytics.products_cdc (
 ORDER BY id;
 
 -- Orders CDC table
-CREATE TABLE ecommerce_analytics.orders_cdc (
+CREATE TABLE IF NOT EXISTS ecommerce_analytics.orders_cdc (
     id Int64,
     customer_id Int64,
     product_id Int64,
