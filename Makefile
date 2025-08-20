@@ -318,22 +318,34 @@ cdc-run-products: ## Run CDC products job (debug mode - console output)
 cdc-run-products-prod: ## Run CDC products job (production mode - to ClickHouse)
 	@./scripts/run_cdc.sh --job-type products
 
-cdc-run-all: ## Run both customers and products CDC jobs (debug mode)
-	@echo "🚀 Running both CDC jobs in background..."
+cdc-run-orders: ## Run CDC orders job (debug mode - console output)
+	@./scripts/run_cdc.sh --job-type orders --debug
+
+cdc-run-orders-prod: ## Run CDC orders job (production mode - to ClickHouse)
+	@./scripts/run_cdc.sh --job-type orders
+
+cdc-run-all: ## Run all CDC jobs (customers, products, orders) in debug mode
+	@echo "🚀 Running all CDC jobs in background..."
 	@./scripts/run_cdc.sh --job-type customers --debug &
 	@echo "⏳ Waiting 5 seconds before starting products job..."
 	@sleep 5
 	@./scripts/run_cdc.sh --job-type products --debug &
-	@echo "✅ Both jobs started! Use 'docker logs -f ed-pyspark-jupyter' to see output"
+	@echo "⏳ Waiting 5 seconds before starting orders job..."
+	@sleep 5
+	@./scripts/run_cdc.sh --job-type orders --debug &
+	@echo "✅ All jobs started! Use 'docker logs -f ed-pyspark-jupyter' to see output"
 	@echo "🛑 To stop: docker exec ed-pyspark-jupyter pkill -f 'spark-submit'"
 
-cdc-run-all-prod: ## Run both customers and products CDC jobs (production mode - to ClickHouse)
-	@echo "🚀 Running both CDC jobs in production mode..."
+cdc-run-all-prod: ## Run all CDC jobs (customers, products, orders) in production mode
+	@echo "🚀 Running all CDC jobs in production mode..."
 	@./scripts/run_cdc.sh --job-type customers &
 	@echo "⏳ Waiting 5 seconds before starting products job..."
 	@sleep 5
 	@./scripts/run_cdc.sh --job-type products &
-	@echo "✅ Both jobs started in production mode!"
+	@echo "⏳ Waiting 5 seconds before starting orders job..."
+	@sleep 5
+	@./scripts/run_cdc.sh --job-type orders &
+	@echo "✅ All jobs started in production mode!"
 	@echo "🛑 To stop: docker exec ed-pyspark-jupyter pkill -f 'spark-submit'"
 
 cdc-stop: ## Stop all CDC jobs
