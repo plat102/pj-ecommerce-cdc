@@ -1,0 +1,33 @@
+# Grafana ClickHouse Datasource Configuration
+# File: /etc/grafana/provisioning/datasources/clickhouse.yml
+
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse-Analytics
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: ""
+    user: ""
+    database: ""
+    basicAuth: false
+    withCredentials: false
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      username: default
+      version: "4.8.2"
+      logs:
+        contextColumns: []
+        defaultTable: otel_logs
+        otelVersion: latest
+        selectContextColumns: true
+      traces:
+        defaultTable: otel_traces
+        durationUnit: nanoseconds
+        otelVersion: latest
+    secureJsonData:
+      password: "clickhouse123"
+    editable: true

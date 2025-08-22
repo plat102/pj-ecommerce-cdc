@@ -371,4 +371,16 @@ cdc-status: ## Check CDC jobs status
 	@echo "📋 All Spark-related processes:"
 	@docker exec ed-pyspark-jupyter pgrep -fl 'spark' || echo "   None"
 
+#=====================================================
+# --- Dashboard Management --------------------------
+#=====================================================
+
+sync-dashboards: ## Sync Grafana dashboards from source to provisioning
+	@./scripts/sync_dashboards.sh
+
+reload-grafana: sync-dashboards ## Reload Grafana with updated dashboards
+	@echo "🔄 Reloading Grafana with updated dashboards..."
+	docker restart grafana
+	@echo "✅ Grafana reloaded! Check dashboards at http://localhost:3000"
+
 

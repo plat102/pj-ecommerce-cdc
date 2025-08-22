@@ -1,0 +1,222 @@
+{
+  "id": null,
+  "uid": "executive-dashboard",
+  "title": "Ecommerce Analytics - Executive Dashboard",
+  "tags": ["ecommerce", "analytics", "executive"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+    "panels": [
+      {
+        "id": 1,
+        "title": "📊 Key Metrics (Last 24h)",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT activity_type, count_24h FROM ecommerce_analytics.recent_activity",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "horizontal"
+        }
+      },
+      {
+        "id": 2,
+        "title": "📈 Daily Sales Trend (Last 30 Days)",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT date, total_orders, total_items_sold FROM ecommerce_analytics.daily_sales_summary WHERE date >= today() - 30 ORDER BY date",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "⏰ Hourly Order Trends (Last 24h)",
+        "type": "barchart",
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT hour, order_count FROM ecommerce_analytics.hourly_orders_trend ORDER BY hour",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "🏆 Top Selling Products",
+        "type": "table",
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 0,
+          "y": 17
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT product_name, total_quantity_sold, total_orders, unique_customers FROM ecommerce_analytics.top_selling_products LIMIT 10",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "👥 Top Customers by Orders",
+        "type": "table",
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 12,
+          "y": 17
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT name, email, total_orders, total_items_purchased FROM ecommerce_analytics.top_customers_by_orders LIMIT 10",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "💾 Data Freshness",
+        "type": "table",
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 27
+        },
+        "targets": [
+          {
+            "rawSql": "SELECT table_name, total_records, last_update, minutes_since_last_update FROM ecommerce_analytics.data_freshness",
+            "format": 1,
+            "queryType": "sql",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "ClickHouse-Analytics"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 10},
+                {"color": "red", "value": 30}
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+  "schemaVersion": 39,
+  "version": 1,
+  "links": []
+}
