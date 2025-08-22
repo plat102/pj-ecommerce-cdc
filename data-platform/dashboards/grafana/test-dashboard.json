@@ -1,0 +1,53 @@
+{
+  "id": null,
+  "uid": "test-dashboard",
+  "title": "ClickHouse Test Dashboard",
+  "tags": ["test"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Recent Activity Test",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT activity_type, count_24h, last_activity FROM ecommerce_analytics.recent_activity",
+          "format": 1,
+          "queryType": "sql",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse-Analytics"
+          },
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "schemaVersion": 39,
+  "version": 1,
+  "links": []
+}
