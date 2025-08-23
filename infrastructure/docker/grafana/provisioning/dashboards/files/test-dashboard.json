@@ -22,7 +22,7 @@
       },
       "targets": [
         {
-          "rawSql": "SELECT activity_type, count_24h, last_activity FROM ecommerce_analytics.recent_activity",
+          "rawSql": "SELECT activity_type, total_records, last_activity FROM ecommerce_analytics.recent_activity",
           "format": 1,
           "queryType": "sql",
           "datasource": {

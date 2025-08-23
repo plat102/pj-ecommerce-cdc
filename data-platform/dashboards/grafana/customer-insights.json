@@ -22,7 +22,7 @@
         },
         "targets": [
           {
-            "rawSql": "SELECT 'Total Customers' as metric, count(*) as value FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 UNION ALL SELECT 'Active Customers (with orders)', count(DISTINCT customer_id) FROM ecommerce_analytics.orders_cdc WHERE _deleted = 0 UNION ALL SELECT 'New Customers (Last 7d)', count(*) FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 AND fromUnixTimestamp64Milli(created_at) >= now() - INTERVAL 7 DAY",
+            "rawSql": "SELECT 'Total Customers' as metric, count(*) as value FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 UNION ALL SELECT 'Active Customers (with orders)', count(DISTINCT customer_id) FROM ecommerce_analytics.orders_cdc WHERE _deleted = 0 UNION ALL SELECT 'New Customers (Last 7d)', count(*) FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 AND fromUnixTimestamp64Micro(created_at) >= now() - INTERVAL 7 DAY",
             "format": 1,
             "queryType": "sql",
             "datasource": {
@@ -91,7 +91,7 @@
         },
         "targets": [
           {
-            "rawSql": "SELECT toDate(fromUnixTimestamp64Milli(created_at)) as date, count(*) as new_customers FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 AND created_at >= toUnixTimestamp64Milli(now() - INTERVAL 30 DAY) GROUP BY date ORDER BY date",
+            "rawSql": "SELECT toDate(fromUnixTimestamp64Micro(created_at)) as date, count(*) as new_customers FROM ecommerce_analytics.customers_cdc WHERE _deleted = 0 AND fromUnixTimestamp64Micro(created_at) >= now() - INTERVAL 30 DAY GROUP BY date ORDER BY date",
             "format": 1,
             "queryType": "sql",
             "datasource": {

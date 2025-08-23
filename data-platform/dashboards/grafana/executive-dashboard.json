@@ -22,7 +22,7 @@
         },
         "targets": [
           {
-            "rawSql": "SELECT activity_type, count_24h FROM ecommerce_analytics.recent_activity",
+            "rawSql": "SELECT activity_type, total_records FROM ecommerce_analytics.recent_activity",
             "format": 1,
             "queryType": "sql",
             "datasource": {
@@ -91,7 +91,7 @@
         },
         "targets": [
           {
-            "rawSql": "SELECT hour, order_count FROM ecommerce_analytics.hourly_orders_trend ORDER BY hour",
+            "rawSql": "SELECT CONCAT(toString(hour), ':00') as hour_label, order_count FROM ecommerce_analytics.hourly_orders_trend ORDER BY hour",
             "format": 1,
             "queryType": "sql",
             "datasource": {
