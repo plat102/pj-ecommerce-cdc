@@ -13,7 +13,7 @@ USE ecommerce_analytics;
 -- Daily sales summary view
 CREATE OR REPLACE VIEW daily_sales_summary AS
 SELECT 
-    toDate(fromUnixTimestamp64Milli(order_time)) as date,
+    toDate(fromUnixTimestamp64Micro(order_time)) as date,
     count(*) as total_orders,
     sum(quantity) as total_items_sold,
     countDistinct(customer_id) as unique_customers,
@@ -27,7 +27,7 @@ ORDER BY date DESC;
 -- Monthly sales trends
 CREATE OR REPLACE VIEW monthly_sales_summary AS
 SELECT 
-    toYYYYMM(fromUnixTimestamp64Milli(order_time)) as month,
+    toYYYYMM(fromUnixTimestamp64Micro(order_time)) as month,
     count(*) as total_orders,
     sum(quantity) as total_items_sold,
     countDistinct(customer_id) as unique_customers,
@@ -47,13 +47,13 @@ SELECT
     c.id as customer_id,
     c.name,
     c.email,
-    fromUnixTimestamp64Milli(c.created_at) as customer_since,
+    fromUnixTimestamp64Micro(c.created_at) as customer_since,
     count(o.id) as total_orders,
     sum(o.quantity) as total_items_purchased,
-    min(fromUnixTimestamp64Milli(o.order_time)) as first_order_date,
-    max(fromUnixTimestamp64Milli(o.order_time)) as last_order_date,
+    min(fromUnixTimestamp64Micro(o.order_time)) as first_order_date,
+    max(fromUnixTimestamp64Micro(o.order_time)) as last_order_date,
     round(avg(o.quantity), 2) as avg_items_per_order,
-    dateDiff('day', min(fromUnixTimestamp64Milli(o.order_time)), max(fromUnixTimestamp64Milli(o.order_time))) as customer_lifespan_days
+    dateDiff('day', min(fromUnixTimestamp64Micro(o.order_time)), max(fromUnixTimestamp64Micro(o.order_time))) as customer_lifespan_days
 FROM customers_cdc c
 LEFT JOIN orders_cdc o ON c.id = o.customer_id AND o._deleted = 0
 WHERE c._deleted = 0
@@ -88,8 +88,8 @@ SELECT
     sum(o.quantity) as total_quantity_sold,
     countDistinct(o.customer_id) as unique_customers,
     round(avg(o.quantity), 2) as avg_quantity_per_order,
-    min(fromUnixTimestamp64Milli(o.order_time)) as first_sale_date,
-    max(fromUnixTimestamp64Milli(o.order_time)) as last_sale_date
+    min(fromUnixTimestamp64Micro(o.order_time)) as first_sale_date,
+    max(fromUnixTimestamp64Micro(o.order_time)) as last_sale_date
 FROM products_cdc p
 LEFT JOIN orders_cdc o ON p.id = o.product_id AND o._deleted = 0
 WHERE p._deleted = 0
@@ -119,40 +119,37 @@ LIMIT 20;
 CREATE OR REPLACE VIEW recent_activity AS
 SELECT 
     'orders' as activity_type,
-    count(*) as count_24h,
-    max(fromUnixTimestamp64Milli(order_time)) as last_activity
+    count(*) as total_records,
+    max(fromUnixTimestamp64Micro(order_time)) as last_activity
 FROM orders_cdc 
-WHERE fromUnixTimestamp64Milli(order_time) >= now() - INTERVAL 1 DAY
-  AND _deleted = 0
+WHERE _deleted = 0
 
 UNION ALL
 
 SELECT 
     'customers' as activity_type,
-    count(*) as count_24h,
-    max(fromUnixTimestamp64Milli(created_at)) as last_activity
+    count(*) as total_records,
+    max(fromUnixTimestamp64Micro(created_at)) as last_activity
 FROM customers_cdc 
-WHERE fromUnixTimestamp64Milli(created_at) >= now() - INTERVAL 1 DAY
-  AND _deleted = 0
+WHERE _deleted = 0
 
 UNION ALL
 
 SELECT 
     'products' as activity_type,
-    count(*) as count_24h,
-    max(fromUnixTimestamp64Milli(created_at)) as last_activity
+    count(*) as total_records,
+    max(fromUnixTimestamp64Micro(created_at)) as last_activity
 FROM products_cdc 
-WHERE fromUnixTimestamp64Milli(created_at) >= now() - INTERVAL 1 DAY
-  AND _deleted = 0;
+WHERE _deleted = 0;
 
 -- Hourly order trends (last 24 hours)
 CREATE OR REPLACE VIEW hourly_orders_trend AS
 SELECT 
-    toHour(fromUnixTimestamp64Milli(order_time)) as hour,
+    toHour(fromUnixTimestamp64Micro(order_time)) as hour,
     count(*) as order_count,
     sum(quantity) as total_items
 FROM orders_cdc 
-WHERE fromUnixTimestamp64Milli(order_time) >= now() - INTERVAL 1 DAY
+WHERE fromUnixTimestamp64Micro(order_time) >= now() - INTERVAL 1 DAY
   AND _deleted = 0
 GROUP BY hour
 ORDER BY hour;
@@ -206,7 +203,7 @@ ORDER BY date;
 -- Populate materialized view (run this periodically)
 INSERT INTO daily_metrics_mv
 SELECT 
-    toDate(fromUnixTimestamp64Milli(order_time)) as date,
+    toDate(fromUnixTimestamp64Micro(order_time)) as date,
     count(*) as total_orders,
     countDistinct(customer_id) as total_customers,
     sum(quantity) as total_items_sold,
@@ -214,5 +211,5 @@ SELECT
     avg(quantity) as avg_items_per_order
 FROM orders_cdc 
 WHERE _deleted = 0
-  AND toDate(fromUnixTimestamp64Milli(order_time)) = today() - 1
+  AND toDate(fromUnixTimestamp64Micro(order_time)) = today() - 1
 GROUP BY date;
