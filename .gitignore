@@ -79,3 +79,11 @@ data-platform/streaming/spark/output/
 
 # Volume mounts (runtime data)
 volumes/
+## Terraform
+infrastructure/terraform/.terraform/
+infrastructure/terraform/.terraform.lock.hcl
+infrastructure/terraform/terraform.tfstate
+infrastructure/terraform/terraform.tfstate.backup
+infrastructure/terraform/crash.log
+infrastructure/terraform/.terraform.tfstate.*
+infrastructure/terraform/terraform.tfvars
