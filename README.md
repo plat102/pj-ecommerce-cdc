@@ -44,12 +44,32 @@ cp .env.example infrastructure/docker/.env
 make up
 ```
 
-## Development
 
-```bash
-# Generate demo data
-make demo-data
+## Available Dashboards & UIs
 
-# Build Docker image
-make build-ui
-```
+After running `make up`, you can access the following interfaces:
+
+- **Streamlit UI (CDC Testing UI):**
+	- [http://localhost:8501](http://localhost:8501)
+	- Edit and view data, test CDC flows interactively.
+
+	![Streamlit UI](docs/images/streamlit-ui.png)
+
+- **Grafana Dashboard:**
+	- [http://localhost:3000](http://localhost:3000)
+	- Visualize analytics and metrics (default user: `admin`, password: `admin123`).
+    - Query and explore analytics data in ClickHouse.
+
+	![Grafana Dashboard](docs/images/grafana.png)
+- **Debezium UI:**
+	- [http://localhost:8085](http://localhost:8085)
+	- Manage CDC connectors and monitor their status.
+
+	![Debezium UI](docs/images/debezium-ui.png)
+- **Kafka Console (Redpanda Console):**
+	- [http://localhost:8080](http://localhost:8080)
+	- Inspect Kafka topics, messages, and consumer groups.
+
+	![Kafka Console](docs/images/kafka-console.png)
+
+---
