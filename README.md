@@ -1,21 +1,52 @@
-# pj-cdc-ecommerce
+# CDC Ecommerce Project
+
+This project is a demo platform for Change Data Capture (CDC) in ecommerce, featuring:
+- Streamlit UI for editing/viewing data
+- Kafka, Debezium, Postgres, Spark, ClickHouse, Grafana dashboards
+
+
+## Requirements
+
+- Docker & Docker Compose installed
+	- [Install Docker](https://docs.docker.com/get-docker/)
+	- [Install Docker Compose](https://docs.docker.com/compose/install/)
+- GNU Make installed
+	- [Install Make](https://www.gnu.org/software/make/)
+
+### Installation on Ubuntu
+Install required tools with the following commands:
+
+```bash
+# Install Docker
+sudo apt update
+sudo apt install -y docker.io
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Install Docker Compose
+sudo apt install -y docker-compose
+
+# Install GNU Make
+sudo apt install -y make
+```
+
+## Quick Start (Docker Only)
+
+Clone the repository and run the entire CDC Ecommerce stack:
+```bash
+git clone https://github.com/plat102/pj-ecommerce-cdc.git
+cd pj-ecommerce-cdc
+
+# Start all services (DB, Kafka, Debezium, UI, Spark, Analytics...)
+make up              
+```
 
 ## Development
 
-```
-# Python Environment
-make setup-venv      # Setup virtual environment
-make activate-venv   # Show activation command
-make install-deps    # Install dependencies
-make clean-venv      # Remove venv
-```
+```bash
+# Generate demo data
+make demo-data
 
-```
-# Local Development  
-make run-ui-local    # Run Streamlit locally (requires active venv)
-make demo-data       # Generate test data (requires active venv)
-
-# Docker Deployment
-make up-ui           # Start UI as Docker service
-make build-ui        # Build Docker image
+# Build Docker image
+make build-ui
 ```
