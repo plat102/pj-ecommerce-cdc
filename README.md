@@ -32,13 +32,16 @@ sudo apt install -y make
 
 ## Quick Start (Docker Only)
 
-Clone the repository and run the entire CDC Ecommerce stack:
+Clone the repository, copy environment file, and run the entire CDC Ecommerce stack:
 ```bash
 git clone https://github.com/plat102/pj-ecommerce-cdc.git
 cd pj-ecommerce-cdc
 
-# Start all services (DB, Kafka, Debezium, UI, Spark, Analytics...)
-make up              
+# Create the .env file
+cp .env.example infrastructure/docker/.env
+
+ # Start all services (DB, Kafka, Debezium, UI, Spark, Analytics...)
+make up
 ```
 
 ## Development
