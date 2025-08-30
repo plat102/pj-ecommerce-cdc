@@ -3,8 +3,17 @@ package_update: true
 package_upgrade: true
 packages:
   - docker.io
-  - docker-compose
+  - curl
+  - apt-transport-https
+  - ca-certificates
+  - software-properties-common
+  - make
 runcmd:
   - usermod -aG docker azureuser
   - systemctl enable docker
   - systemctl start docker
+  # Docker Compose v2
+  - mkdir -p /usr/local/lib/docker/cli-plugins
+  - curl -SL https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+  - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  - ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
