@@ -1,12 +1,11 @@
 # CDC Ecommerce Project
 
-This project is a demo platform for Change Data Capture (CDC) in ecommerce, featuring:
+This project is a demo platform for Change Data Capture (CDC), featuring:
 
 - Streamlit UI for editing/viewing data
 - Kafka, Debezium, Postgres, Spark, ClickHouse, Grafana dashboards
 
 ## Technical stack
-
 
 | **Layer**                    | **Technology**           | **Purpose**                                           |
 | ---------------------------------- | ------------------------------ | ----------------------------------------------------------- |
@@ -17,19 +16,23 @@ This project is a demo platform for Change Data Capture (CDC) in ecommerce, feat
 | **Analytics Storage (OLAP)** | ClickHouse                     | Stores processed data for fast analytical queries.          |
 | **Visualization**            | Grafana                        | Dashboards for monitoring CDC pipelines.                    |
 | **Demo UI**                  | Streamlit                      | Interactive interface to test CDC and generate sample data. |
-| **Infrastructure Setup**   | Docker Compose, Makefile       | Manages local deployment and service automation.            |
+| **Infrastructure Setup**     | Docker Compose, Makefile       | Manages local deployment and service automation.            |
 
 ![1760612911844](image/README/1760612911844.png)
 
-## Requirements
+---
+
+## Quick Start (Docker Only)
+
+### Requirements
 
 - Docker & Docker Compose installed
-	- [Install Docker](https://docs.docker.com/get-docker/)
-	- [Install Docker Compose](https://docs.docker.com/compose/install/)
+  - [Install Docker](https://docs.docker.com/get-docker/)
+  - [Install Docker Compose](https://docs.docker.com/compose/install/)
 - GNU Make installed
   - [Install Make](https://www.gnu.org/software/make/)
 
-### Installation on Ubuntu
+#### Installation on Ubuntu
 
 Install required tools with the following commands:
 
@@ -47,7 +50,7 @@ sudo apt install -y docker-compose
 sudo apt install -y make
 ```
 
-## Quick Start (Docker Only)
+### Run
 
 Clone the repository, copy environment file, and run the entire CDC Ecommerce stack:
 
@@ -61,6 +64,8 @@ cp .env.example infrastructure/docker/.env
  # Start all services (DB, Kafka, Debezium, UI, Spark, Analytics...)
 make up
 ```
+
+---
 
 ## Available Dashboards & UIs
 
@@ -91,5 +96,53 @@ After running `make up`, you can access the following interfaces:
   - Inspect Kafka topics, messages, and consumer groups.
 
   ![Kafka Console](docs/images/kafka-console.png)
+
+---
+
+## Implementation Highlights
+
+### Notable Engineering Decisions
+
+**🏗️ Layered Spark code structure -** Separated concerns into `apps/`, `jobs/`, `io/`, `transformations/`, `schemas/`, and `config/` for maintainability and code reuse across jobs. See: [`data-platform/streaming/spark/src/`](data-platform/streaming/spark/src/)
+
+* **Base Job Framework** - Built [`BaseCDCJob`](data-platform/streaming/spark/src/jobs/base_cdc_job.py) abstract class handling Spark session, I/O setup, streaming/debug modes, and checkpoints-jobs only implement transform logic.
+
+**🔄 CDC Deduplication Pattern** - Implemented ClickHouse `ReplacingMergeTree` with `_version` (from Debezium `ts_ms`) and `_deleted` flag for automatic deduplication. See: [`create_tables.sql`](infrastructure/docker/clickhouse/create_tables.sql)
+
+**⚙️ Developer Automation** - Single-command orchestration via Makefile (`make up`, `make cdc-run`, `make cdc-debug`). See: [`Makefile`](Makefile)
+
+### Key Challenges & Learnings
+
+**🔧 Debezium Decimal Encoding**
+
+*Problem:* Debezium encodes PostgreSQL `DECIMAL`/`NUMERIC` types as base64 strings with scale metadata, causing type mismatch errors in Spark.
+
+*Solution:* Built custom UDF ([`decode_decimal_udf`](data-platform/streaming/spark/src/utils/udfs.py)) to parse base64-encoded bytes and reconstruct decimal values with proper precision.
+
+*Learning:* Verify CDC serialization formats when integrating tools-schema evolution requires explicit type conversions.
+
+**🚀 Local Environment Complexity**
+
+*Problem:* Running 8+ services (Postgres, Kafka, Debezium, Spark, ClickHouse, Grafana, Streamlit) simultaneously on developer machines.
+
+*Solution:* Modularized Docker Compose files by service group with health checks, dependency ordering, and Makefile targets for incremental startup.
+
+*Learning:* Good developer experience reduces onboarding friction and encourages experimentation.
+
+---
+
+## Future Enhancements
+
+**⚡ Versioned Checkpoint Management** - Implement versioned checkpoint directories (e.g., `/checkpoints/orders_cdc/v1`, `/v2`) to handle schema changes and job updates without losing streaming state, enabling zero-downtime deployments.
+
+**📊 Materialized Views for Query Performance** - Implement ClickHouse materialized views with pre-aggregated CDC data to eliminate the need for `FINAL` modifier in dashboard queries, improving Grafana refresh speeds.
+
+**🔐 Schema Registry Integration** - Add Confluent Schema Registry to manage Avro/JSON schemas centrally, enabling better schema evolution tracking and validation.
+
+**🧪 Automated Testing Suite** - Build integration tests for CDC pipelines using pytest and Docker Compose to validate end-to-end data flow from Postgres → Kafka → Spark → ClickHouse.
+
+**📈 Metrics & Alerting** - Implement Prometheus exporters for Kafka lag, Debezium connector health, and Spark job metrics with alerting rules in Grafana.
+
+**🔄 Multi-Environment Support** - Extend infrastructure to support dev/staging/prod environments with environment-specific configurations and separate ClickHouse clusters.
 
 ---
