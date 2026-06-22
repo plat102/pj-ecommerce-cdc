@@ -37,6 +37,9 @@ poetry.lock
 *.swp
 *.swo
 
+# Claude Code (local-only overrides; shared commands/skills are committed)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db
