@@ -1,6 +1,16 @@
 ## ADDED Requirements
 
 > **Status:** Placeholder requirements for the design-only phase of this proposal. Detailed scenarios for each phase (retention, PII, schema-registry+DQ, catalog) will be filled in as that phase reaches implementation. See `design.md` for the full direction.
+>
+> **On archive**, each broad placeholder below decomposes into the phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared":
+>
+> | Placeholder here | Decomposes into (on archive) |
+> |---|---|
+> | `pii-classification` | `pii-hashing-customers-email`, `pii-tokenization-customers-name`, `clickhouse-rbac-roles`, `cdc-consumer-access-log` |
+> | `ttl-retention` | `clickhouse-ttl-policies`, `kafka-topic-retention`, `postgres-archival-policy`, `checkpoint-versioned-paths` |
+> | `schema-contract` | `schema-registry-publication` |
+> | `data-quality-gate` | `gx-batch-validation`, `dlq-on-validation-failure`, `freshness-slo-and-alert` |
+> | `lineage-emission` | `openmetadata-ingestion`, `openlineage-spark-emission`, `column-documentation-coverage` |
 
 ### Requirement: pii-classification
 PII columns (name, email, and any future contact fields) SHALL be marked in a central classification manifest and masked before landing in ClickHouse production tables that downstream consumers (Grafana, BI tools) can read.

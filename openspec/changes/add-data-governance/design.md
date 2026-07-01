@@ -34,7 +34,7 @@ Governance is structured into four pillars, each independently shippable. The re
 **Tool choice:** Confluent **Schema Registry** + **Great Expectations** running inside Spark `foreachBatch`.
 
 **Behavior the spec will encode:**
-- The Debezium connector publishes Avro and registers schemas to a Schema Registry running at `schema-registry:8081` (in-cluster) / `localhost:8081` (host).
+- The Debezium connector configuration MUST declare `AvroConverter` with a `schema.registry.url` value — verifiable by inspecting `data-platform/cdc/connectors/register-pg.json`. The Schema Registry service itself (running at `schema-registry:8081` in-cluster / `localhost:8081` on host) is an infrastructure concern; the spec pins connector-side configuration, not service liveness.
 - Each Spark CDC job runs a Great Expectations suite against the micro-batch DataFrame *before* the ClickHouse write. Failing rows are routed to a `*_dlq` Kafka topic with the original payload + the failing expectation name.
 - Each target ClickHouse table has a freshness SLO: `minutes_since_last_update < 10` during pipeline-active hours. Breach fires a Grafana alert.
 
@@ -92,7 +92,7 @@ Governance is structured into four pillars, each independently shippable. The re
 **Tool choice:** Native features only — no new service.
 
 **Behavior the spec will encode:**
-- ClickHouse CDC tables carry TTLs: tombstones (`_deleted = 1`) expire 90 days after `event_time`; active rows expire 2 years after `event_time`.
+- ClickHouse CDC tables carry TTLs anchored on `toDateTime(_version / 1000)` (the Debezium change timestamp): tombstones (`_deleted = 1`) expire 90 days after the change, active rows expire 2 years after the change.
 - Kafka topics have explicit retention declared in topic-config: `pg.public.*` = 7 days, `governance.access_log` = 30 days, `*_dlq` = 14 days.
 - Spark checkpoint directories follow a versioned-path convention: `{CHECKPOINT_LOCATION}/{table_name}/v{schema_version}`. A new Make target `make cdc-rotate-checkpoint TABLE=customers` moves the current checkpoint to `_archived/{date}/` and creates a fresh empty path.
 - Postgres `orders` older than 1 year are moved to `orders_archive` by a monthly cron documented in `data-platform/governance/retention/postgres-archive.sql`. The archive table is *not* captured by Debezium.
@@ -118,8 +118,10 @@ Lighter footprint, native ClickHouse connector (DataHub's is community-maintaine
 **Hashing PII, not tokenizing-with-a-vault**
 Vault/KMS is the correct production answer. For a demo stack, deterministic SHA-256 with a salt from `PII_SALT` gives the right *shape* of solution — irreversible, joinable, rotatable — without standing up a secret manager. The PROPOSAL.md should explicitly call this out as a demo-grade choice.
 
-**TTL on `event_time`, not `inserted_at`**
-ClickHouse rows have both. `event_time` is the Debezium `ts_ms` — i.e., when the change happened in Postgres. Using it for TTL means a row that arrives 6 months late still expires on the same calendar date it would have if it arrived on time. This is the right semantic for compliance retention; `inserted_at` would let backfills extend retention windows accidentally.
+**TTL on the Debezium change timestamp derived from `_version`**
+No dedicated `event_time` column exists on the CDC tables today; the only Debezium-sourced timestamp landing in ClickHouse is `_version UInt64` (populated from `ts_ms`, milliseconds since epoch — see the transformers). TTL is therefore anchored on the expression `toDateTime(_version / 1000)`, which gives ClickHouse the `DateTime` value its TTL clause requires without a schema change.
+
+The semantics are identical to a dedicated `event_time` column: retention tracks *when the change happened in Postgres*, so a row that arrives 6 months late still expires on the same calendar date it would have if it arrived on time. Anchoring on ingest time (e.g., an `inserted_at` column) would let backfills accidentally extend retention windows — that mode is explicitly rejected.
 
 ## Risks / Trade-offs
 
@@ -136,7 +138,10 @@ A deterministic hash means `hash(email, salt_v1) ≠ hash(email, salt_v2)`. Rota
 The listener emits an HTTP event per task on job start/end. The CDC jobs use `TRIGGER_INTERVAL` defaulting to small intervals, so the per-second event rate could pressure the OpenMetadata HTTP endpoint. Mitigation: configure the OpenLineage transport with batching, or fall back to file-based emission with a periodic uploader.
 
 **ClickHouse TTL interaction with `ReplacingMergeTree FINAL` queries**
-TTL removes rows during merges. If a tombstone (`_deleted=1`) expires before the next `FINAL` query, the deduplicated state is correct *and* compact. But if a tombstone expires *before* its corresponding active row (e.g., late-arriving updates), `FINAL` could resurrect the deleted row. The 90-day tombstone TTL is intentionally generous to keep this rare. Mitigation: monitor; consider `OPTIMIZE TABLE ... FINAL` on a schedule to force merges before TTL evaluation.
+TTL removes rows during merges. Because retention is anchored on the change timestamp derived from `_version`, an out-of-order arrival scenario is possible: if a tombstone (`_deleted=1`) expires before the next `FINAL` query, the deduplicated state is correct *and* compact. But if a tombstone expires *before* its corresponding active row (e.g., late-arriving updates whose `_version` is older than the tombstone's), `FINAL` could resurrect the deleted row. The 90-day tombstone TTL is intentionally generous to keep this rare. Mitigation: monitor; consider `OPTIMIZE TABLE ... FINAL` on a schedule to force merges before TTL evaluation.
+
+**Checkpoint versioning is structural until Phase 3**
+Phase 1 introduces the `{table}/v1` checkpoint path convention, but `schema_version` only becomes a meaningful integer once Schema Registry lands in Phase 3 and starts assigning real version numbers. Until then, `v1` is a hard-coded prefix that gives us the *shape* of the convention without the machinery. Mitigation: when Phase 3 ships Avro, use the `make cdc-rotate-checkpoint TABLE=<name>` target (introduced in task 1.4) to move each job to `v2`; the migration is then routine rather than a schema-corruption event.
 
 **Spec drift between governance and existing capabilities**
 Pillar 1 changes Debezium's converter; Pillar 4 changes ClickHouse schemas. Both touch behavior covered by `cdc-pipeline` and `analytics` specs. If the MODIFIED deltas in those capabilities lag behind the implementation, `make spec-validate` still passes but the specs lie. Mitigation: every PROPOSAL.md for governance work must enumerate the cross-capability deltas explicitly in its `## What Changes` section, not just the `data-governance` additions.
@@ -151,12 +156,13 @@ Each phase is independently shippable; ship in order, but stop at any phase if t
 **Phase 1 — Retention & Lifecycle (Pillar 4)**
 - Pure config; no new services.
 - Exit criteria: ClickHouse TTL clauses live, Kafka topic retention declared, checkpoint convention documented and adopted by all three jobs, Postgres archive script written (not necessarily cron-scheduled).
+- Checkpoint paths adopt the `{table}/v1` form now; the schema-version integer becomes meaningful in Phase 3.
 - Highest risk reduction per line of code: bounds storage growth across all four data stores.
 
 **Phase 2 — PII / Access (Pillar 3)**
 - One Spark UDF, one ClickHouse migration, one new Kafka topic.
-- Exit criteria: `email` and `name` arrive masked in ClickHouse; `analyst_readonly` role exists and Grafana uses it; `governance.access_log` topic exists with at least one consumer principal emitting on startup.
-- Touches one transformer plus one ClickHouse migration. No new container.
+- Exit criteria: `email` and `name` arrive masked in ClickHouse; `analyst_readonly` role exists with row policies; `CLICKHOUSE_ANALYST_PASSWORD` defined in `.env.example`; `infrastructure/docker/grafana/provisioning/datasources/clickhouse.yml` `username` switched to `analyst_readonly` (with password sourced from the new env var); `governance.access_log` topic exists with at least one consumer principal emitting on startup.
+- Touches one transformer, one ClickHouse migration, one Grafana datasource file, and `.env.example`. No new container.
 
 **Phase 3 — Schema Registry + Data Quality (Pillar 1)**
 - Adds Schema Registry container; changes Debezium converter; introduces GX inside Spark jobs.
@@ -185,20 +191,22 @@ These will become `### Requirement:` blocks in `openspec/specs/data-governance/s
 | 3 | `pii-tokenization-customers-name` | `customers.name` is tokenized in ClickHouse |
 | 3 | `clickhouse-rbac-roles` | Role `analyst_readonly` exists with row policies; Grafana uses it |
 | 3 | `cdc-consumer-access-log` | Consumers emit a startup event to `governance.access_log` |
-| 4 | `clickhouse-ttl-policies` | TTL: tombstones 90d, active rows 2y, anchored on `event_time` |
+| 4 | `clickhouse-ttl-policies` | TTL: tombstones 90d, active rows 2y, anchored on `_version` (Debezium `ts_ms`) via `toDateTime(_version / 1000)` |
 | 4 | `kafka-topic-retention` | Explicit retention per topic family |
 | 4 | `postgres-archival-policy` | `orders` older than 1 year move to `orders_archive` |
 | 4 | `checkpoint-versioned-paths` | Spark checkpoints live under `{table}/v{schema_version}` |
 
-## Cross-Capability Deltas
+## Cross-Capability Modifications
 
-Governance changes observable behavior already covered by other specs. The future PROPOSAL.md must declare these MODIFIED requirements:
+Governance changes observable behavior already covered by other specs. Repo convention (see `openspec/changes/baseline/specs/`) is to keep MODIFIED requirements under `openspec/changes/add-data-governance/specs/<capability>/spec.md`, using `## MODIFIED Requirements` sections that mirror the shape of the corresponding blocks in `openspec/specs/<capability>/spec.md`. On archive (see tasks.md §5), those sections are merged back into the main specs. There is no separate `deltas/` directory in this repo.
+
+Governance-driven MODIFIED requirements land in:
 
 - **`cdc-pipeline`**: Debezium converter changes from JSON to Avro; Spark jobs gain GX validation + OpenLineage emission steps; checkpoint path convention changes.
 - **`analytics`**: ClickHouse tables gain TTL clauses; new `analyst_readonly` role and row policies; Grafana connects via the new role.
 - **`infrastructure`**: New `up-governance` / `down-governance` Make targets; new `docker-compose.governance.yml`; Schema Registry added to `docker-compose.kafka.yml`.
 
-The `streamlit-ui` capability is touched only if the Kafka monitor view is updated to emit access-log events; that delta is optional and can ship later.
+The `streamlit-ui` capability is touched only if the Kafka monitor view is updated to emit access-log events; that modification is optional and can ship later.
 
 ## Out of Scope
 

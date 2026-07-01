@@ -26,5 +26,5 @@ This is currently a **design-only proposal**. DESIGN.md captures the full direct
 ## Impact
 
 - Adds `openspec/changes/add-data-governance/DESIGN.md` (this turn).
-- Future implementation will add: `openspec/specs/data-governance/spec.md`, per-capability deltas under `changes/add-data-governance/deltas/`, Schema Registry service, OpenMetadata stack, GX suites, PII UDFs, ClickHouse TTL/RBAC migrations.
+- Future implementation will add: `openspec/specs/data-governance/spec.md`, per-capability MODIFIED specs under `changes/add-data-governance/specs/<capability>/spec.md` (repo convention — see `openspec/changes/baseline/specs/`), Schema Registry service, OpenMetadata stack, GX suites, PII UDFs, ClickHouse TTL/RBAC migrations.
 - No code or configuration files are modified in this design-only turn.
