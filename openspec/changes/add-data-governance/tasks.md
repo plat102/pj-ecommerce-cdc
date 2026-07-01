@@ -2,17 +2,17 @@
 
 - [x] 0.1 Write DESIGN.md covering four pillars, tool choices, tradeoffs, and phased rollout
 - [x] 0.2 Write PROPOSAL.md describing the new `data-governance` capability and cross-capability deltas
-- [ ] 0.3 User approves design direction before implementation begins
+- [x] 0.3 User approves design direction before implementation begins
 
 ## 1. Phase 1 — Retention & Lifecycle (Pillar 4)
 
-- [ ] 1.1 Add TTL clauses to `infrastructure/docker/clickhouse/create_tables.sql` anchored on `toDateTime(_version / 1000)` (Debezium `ts_ms`): tombstones `WHERE _deleted = 1` expire at `+ INTERVAL 90 DAY`, active rows at `+ INTERVAL 2 YEAR`. No new column required.
-- [ ] 1.2 Declare explicit Kafka topic retention (`pg.public.*` = 7d, `governance.access_log` = 30d, `*_dlq` = 14d)
-- [ ] 1.3 Adopt versioned checkpoint paths in `BaseCDCJob`: `{CHECKPOINT_LOCATION}/{table_name}/v1`. Hard-code `v1` in Phase 1 — the `schema_version` integer becomes meaningful in Phase 3 when Schema Registry lands, at which point `make cdc-rotate-checkpoint` (task 1.4) migrates each job to `v2`.
-- [ ] 1.4 Add `make cdc-rotate-checkpoint TABLE=<name>` target
-- [ ] 1.5 Write `data-platform/governance/retention/postgres-archive.sql` for `orders` → `orders_archive`
-- [ ] 1.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `clickhouse-ttl-policies`, `kafka-topic-retention`, `postgres-archival-policy`, `checkpoint-versioned-paths` (decomposed from the current `ttl-retention` placeholder)
-- [ ] 1.7 Create `specs/analytics/spec.md` in this change dir with `## MODIFIED Requirements` extending `clickhouse-table-engine` to include the TTL clause semantics from task 1.1
+- [x] 1.1 Add TTL clauses to `infrastructure/docker/clickhouse/create_tables.sql` anchored on `toDateTime(_version / 1000)` (Debezium `ts_ms`): tombstones `WHERE _deleted = 1` expire at `+ INTERVAL 90 DAY`, active rows at `+ INTERVAL 2 YEAR`. No new column required.
+- [x] 1.2 Declare explicit Kafka topic retention (`pg.public.*` = 7d, `governance.access_log` = 30d, `*_dlq` = 14d) — see `data-platform/governance/retention/apply-kafka-topic-retention.sh`
+- [x] 1.3 Adopt versioned checkpoint paths in `BaseCDCJob`: `{CHECKPOINT_LOCATION}/{table_name}/v1`. Hard-code `v1` in Phase 1 — the `schema_version` integer becomes meaningful in Phase 3 when Schema Registry lands, at which point `make cdc-rotate-checkpoint` (task 1.4) migrates each job to `v2`.
+- [x] 1.4 Add `make cdc-rotate-checkpoint TABLE=<name>` target
+- [x] 1.5 Write `data-platform/governance/retention/postgres-archive.sql` for `orders` → `orders_archive`
+- [x] 1.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `clickhouse-ttl-policies`, `kafka-topic-retention`, `postgres-archival-policy`, `checkpoint-versioned-paths` (decomposed from the current `ttl-retention` placeholder)
+- [x] 1.7 Create `specs/analytics/spec.md` in this change dir with `## MODIFIED Requirements` extending `clickhouse-table-engine` to include the TTL clause semantics from task 1.1
 
 ## 2. Phase 2 — PII / Access Control / Audit (Pillar 3)
 

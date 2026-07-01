@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS ecommerce_analytics.customers_cdc (
     _version UInt64,
     _deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(_version)
-ORDER BY id;
+ORDER BY id
+TTL toDateTime(_version / 1000) + INTERVAL 90 DAY DELETE WHERE _deleted = 1,
+    toDateTime(_version / 1000) + INTERVAL 2 YEAR DELETE;
 
 -- Products CDC table
 CREATE TABLE IF NOT EXISTS ecommerce_analytics.products_cdc (
@@ -18,7 +20,9 @@ CREATE TABLE IF NOT EXISTS ecommerce_analytics.products_cdc (
     _version UInt64,
     _deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(_version)
-ORDER BY id;
+ORDER BY id
+TTL toDateTime(_version / 1000) + INTERVAL 90 DAY DELETE WHERE _deleted = 1,
+    toDateTime(_version / 1000) + INTERVAL 2 YEAR DELETE;
 
 -- Orders CDC table
 CREATE TABLE IF NOT EXISTS ecommerce_analytics.orders_cdc (
@@ -30,4 +34,6 @@ CREATE TABLE IF NOT EXISTS ecommerce_analytics.orders_cdc (
     _version UInt64,
     _deleted UInt8 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(_version)
-ORDER BY id;
+ORDER BY id
+TTL toDateTime(_version / 1000) + INTERVAL 90 DAY DELETE WHERE _deleted = 1,
+    toDateTime(_version / 1000) + INTERVAL 2 YEAR DELETE;

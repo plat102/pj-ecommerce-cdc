@@ -371,6 +371,18 @@ cdc-status: ## Check CDC jobs status
 	@echo "📋 All Spark-related processes:"
 	@docker exec ed-pyspark-jupyter pgrep -fl 'spark' || echo "   None"
 
+CHECKPOINT_ROOT ?= /tmp/spark-checkpoints
+cdc-rotate-checkpoint: ## Archive a CDC checkpoint (use: make cdc-rotate-checkpoint TABLE=customers_cdc)
+	@if [ -z "$(TABLE)" ]; then echo "TABLE is required (e.g., make cdc-rotate-checkpoint TABLE=customers_cdc)"; exit 2; fi
+	@docker exec ed-pyspark-jupyter sh -c '\
+		src="$(CHECKPOINT_ROOT)/$(TABLE)"; \
+		if [ ! -d "$$src" ]; then echo "no checkpoint at $$src"; exit 0; fi; \
+		archive_dir="$(CHECKPOINT_ROOT)/_archived/$$(date +%Y%m%d-%H%M%S)"; \
+		mkdir -p "$$archive_dir"; \
+		mv "$$src" "$$archive_dir/$(TABLE)"; \
+		mkdir -p "$$src"; \
+		echo "moved $$src -> $$archive_dir/$(TABLE)"'
+
 #=====================================================
 # --- Dashboard Management --------------------------
 #=====================================================
