@@ -24,14 +24,14 @@
 
 ## 2. Phase 2 — Test Infrastructure (skeleton, no tests)
 
-- [ ] 2.1 Create `tests/conftest.py` (empty is fine; reserves the entry point)
-- [ ] 2.2 Create `tests/spark/conftest.py` with a session-scoped `SparkSession.builder.master('local[*]').appName('unit-tests').getOrCreate()` fixture and helper fixtures for sample Kafka payload DataFrames
-- [ ] 2.3 Create `tests/streamlit/conftest.py` with mock fixtures (`mock_psycopg2_connect`, `mock_kafka_producer`, `mock_kafka_consumer`)
-- [ ] 2.4 Add `[tool.pytest.ini_options]` block to `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["data-platform/streaming/spark/src", "application/cdc-testing-ui"]`, `addopts = "-ra --strict-markers"`
-- [ ] 2.5 Add a `make test` Makefile target that runs `uv run pytest`
-- [ ] 2.6 Verify: `make test` exits 0 (or maps pytest's "no tests collected" exit 5 to 0 via `pytest --exitfirst` config)
-- [ ] 2.7 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` (decomposed from the `test-infrastructure` placeholder)
-- [ ] 2.8 Update `specs/infrastructure/spec.md` — add `## MODIFIED Requirements` (or extend the block from 1.12) to mention `make test` as a canonical target
+- [x] 2.1 Create `tests/conftest.py` (empty is fine; reserves the entry point)
+- [x] 2.2 Create `tests/spark/conftest.py` with a session-scoped `SparkSession.builder.master('local[*]').appName('unit-tests').getOrCreate()` fixture and helper fixtures for sample Kafka payload DataFrames
+- [x] 2.3 Create `tests/streamlit/conftest.py` with mock fixtures (`mock_psycopg2_connect`, `mock_kafka_producer`, `mock_kafka_consumer`)
+- [x] 2.4 Add `[tool.pytest.ini_options]` block to `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["data-platform/streaming/spark/src", "application/cdc-testing-ui"]`, `addopts = "-ra --strict-markers"`
+- [x] 2.5 Add a `make test` Makefile target that runs `uv run pytest`
+- [x] 2.6 Verify: `make test` exits 0 (or maps pytest's "no tests collected" exit 5 to 0 via `pytest --exitfirst` config)
+- [x] 2.7 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` (decomposed from the `test-infrastructure` placeholder)
+- [x] 2.8 Update `specs/infrastructure/spec.md` — add `## MODIFIED Requirements` (or extend the block from 1.12) to mention `make test` as a canonical target
 
 ## 3. Phase 3 — Initial Unit Tests
 

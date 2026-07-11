@@ -1,13 +1,13 @@
 ## ADDED Requirements
 
-> **Status:** Phase 1 requirements (Pillar 1 — Dependency Management) are decomposed below into their phase-scoped form. Phase 2 (`test-infrastructure`) and Phase 3 (`initial-test-coverage`) remain broad placeholders and will be decomposed as those phases reach implementation.
+> **Status:** Phase 1 (Pillar 1 — Dependency Management) and Phase 2 (Pillar 3 — Test Infrastructure skeleton) requirements are decomposed below. Phase 3 (`initial-test-coverage`) remains a broad placeholder and will be decomposed as that phase reaches implementation.
 >
 > **Decomposition status:**
 >
 > | Placeholder | Decomposed? | Phase-scoped requirements |
 > |---|---|---|
 > | `dependency-management` | Yes (Phase 1) | `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` |
-> | `test-infrastructure` | Not yet | `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` |
+> | `test-infrastructure` | Yes (Phase 2) | `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` |
 > | `initial-test-coverage` | Not yet | `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` |
 
 ### Requirement: uv-single-source-deps
@@ -56,17 +56,39 @@ The Streamlit application container defined by `infrastructure/docker/streamlit/
 - **WHEN** the built Streamlit image is inspected
 - **THEN** the `uv` binary SHALL NOT be present in the final image layer
 
-### Requirement: test-infrastructure
-The project SHALL declare a `tests/` directory tree, pytest configuration in `pyproject.toml`, and a `make test` target that runs `pytest` inside the uv-managed venv. This scaffolding SHALL be in place independent of whether any test code exists yet.
+### Requirement: pytest-config-in-pyproject
+Pytest configuration for this project SHALL live under `[tool.pytest.ini_options]` in `pyproject.toml`. The block SHALL declare `testpaths = ["tests"]` and `pythonpath` entries covering both codebases (`data-platform/streaming/spark/src` and `application/cdc-testing-ui`), and it SHALL set `addopts` including `--strict-markers` to catch typos in `@pytest.mark.*` decorators.
+
+#### Scenario: pytest discovers both codebases
+- **WHEN** a test file under `tests/spark/` imports from `transformations`
+- **AND** a test file under `tests/streamlit/` imports from `managers`
+- **THEN** both imports SHALL resolve via the `pythonpath` declared in `[tool.pytest.ini_options]`, without any `pip install -e` step
+
+#### Scenario: config file is pyproject.toml
+- **WHEN** `pytest` starts
+- **THEN** its "configfile" report line SHALL name `pyproject.toml` (no `pytest.ini` or `setup.cfg` SHALL be tracked)
+
+### Requirement: tests-directory-layout
+The project SHALL contain a `tests/` directory at the repo root with `spark/` and `streamlit/` subdirectories. Each subdirectory SHALL contain a `conftest.py` file wiring the fixtures that its test files need (a session-scoped `SparkSession` for `tests/spark/`; mock client fixtures for `tests/streamlit/`).
+
+#### Scenario: tests directory tree exists
+- **WHEN** the repo is inspected
+- **THEN** `tests/conftest.py`, `tests/spark/conftest.py`, and `tests/streamlit/conftest.py` SHALL all exist
+
+#### Scenario: SparkSession is session-scoped
+- **WHEN** multiple test files under `tests/spark/` request the `spark_session` fixture
+- **THEN** all requests SHALL receive the same underlying `SparkSession` instance (avoiding the 3–7s startup cost per file)
+
+### Requirement: make-test-target
+The Makefile SHALL provide a `test` target that runs `uv run pytest`. The target SHALL exit 0 even when pytest collects no tests (mapping pytest's exit code 5 to 0) so that `make test` can be wired into future CI without failing on an empty tree.
 
 #### Scenario: make test with zero tests
 - **WHEN** `make test` is run in a repo state where `tests/` exists but contains no test files
 - **THEN** the target SHALL exit 0 (green) with a message indicating no tests were collected
 
-#### Scenario: pytest discovers both codebases
-- **WHEN** a test file under `tests/spark/` imports from `src.transformations`
-- **AND** a test file under `tests/streamlit/` imports from `managers`
-- **THEN** both imports SHALL resolve via `pythonpath` declared in `[tool.pytest.ini_options]`, without any `pip install -e` step
+#### Scenario: make test runs pytest via uv
+- **WHEN** `make test` is run
+- **THEN** the underlying command SHALL be `uv run pytest` (no direct `pytest` invocation, no manual venv activation)
 
 ### Requirement: initial-test-coverage
 Once test infrastructure exists, the pure-function surfaces of the two Python codebases (Spark transformations/UDFs; Streamlit managers) SHALL carry unit tests sufficient to catch a broken transformer or a broken manager call before end-to-end runs.
