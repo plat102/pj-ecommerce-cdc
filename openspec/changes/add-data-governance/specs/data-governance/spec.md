@@ -92,3 +92,53 @@ Kafka topics SHALL carry explicit `retention.ms` configuration set by `data-plat
 #### Scenario: checkpoint path includes version suffix
 - **WHEN** a CDC job starts in production mode
 - **THEN** the Spark `checkpointLocation` option SHALL be `{CHECKPOINT_LOCATION}/{table_name}/v1`
+
+---
+
+## Phase 2 — PII / Access Control / Audit (decomposed from `pii-classification`)
+
+The four requirements below are the phase-scoped decomposition of the `pii-classification` placeholder for Phase 2 (Pillar 3). They coexist with the placeholder until archive (task 5.3), when the placeholder is replaced by these narrow requirements.
+
+### Requirement: pii-hashing-customers-email
+`customers.email` values SHALL be transformed to a deterministic SHA-256 digest, salted with the `PII_SALT` environment variable, before being written to `ecommerce_analytics.customers_cdc` in ClickHouse. The transformation lives in `data-platform/streaming/spark/src/utils/udfs.py` (`hash_pii_udf`) and is applied by `data-platform/streaming/spark/src/transformations/customers_cdc_transformer.py`.
+
+#### Scenario: raw email never lands in ClickHouse
+- **WHEN** a CDC event with a non-null `customers.email` value is transformed by `CustomersCDCTransformer.transform_customers_cdc_for_clickhouse`
+- **THEN** the output row's `email` column SHALL be a 64-character lowercase hex SHA-256 digest and SHALL NOT equal the source plaintext
+
+#### Scenario: hash is deterministic under fixed salt
+- **WHEN** the same email value is transformed twice with the same `PII_SALT`
+- **THEN** both transformed values SHALL be byte-identical, so downstream joins by hashed email are stable
+
+### Requirement: pii-tokenization-customers-name
+`customers.name` values SHALL be transformed into an irreversible token of the form `{first-initial-uppercase}.{6-hex-chars}` (where the hex is SHA-256 of the remaining characters with `PII_SALT`) before being written to `ecommerce_analytics.customers_cdc`. The transformation is implemented by `tokenize_name_udf` in `data-platform/streaming/spark/src/utils/udfs.py`.
+
+#### Scenario: name landed in ClickHouse is tokenized
+- **WHEN** a CDC event with a non-null `customers.name` value is transformed
+- **THEN** the output row's `name` column SHALL match the pattern `[A-Z]\.[0-9a-f]{6}` and SHALL NOT contain the original full name
+
+### Requirement: clickhouse-rbac-roles
+ClickHouse SHALL declare a role `analyst_readonly` in `infrastructure/docker/clickhouse/create_tables.sql` with SELECT-only grants on `customers_cdc`, `products_cdc`, and `orders_cdc`, plus row policies that restrict the visible rows to `_deleted = 0`. The matching user is created at container init from `create_governance_users.sh` using the `CLICKHOUSE_ANALYST_PASSWORD` env var. `infrastructure/docker/grafana/provisioning/datasources/clickhouse.yml` SHALL connect using `username: analyst_readonly` and reference `$CLICKHOUSE_ANALYST_PASSWORD` for the password.
+
+#### Scenario: analyst role sees only active rows
+- **WHEN** a user connected as `analyst_readonly` runs `SELECT * FROM ecommerce_analytics.customers_cdc`
+- **THEN** the result set SHALL contain no rows where `_deleted = 1`
+
+#### Scenario: analyst role cannot write
+- **WHEN** a user connected as `analyst_readonly` runs an `INSERT`, `ALTER`, or `DROP` against any table in `ecommerce_analytics`
+- **THEN** ClickHouse SHALL reject the statement with an access-denied error
+
+#### Scenario: Grafana datasource uses analyst credentials
+- **WHEN** the Grafana provisioning file `infrastructure/docker/grafana/provisioning/datasources/clickhouse.yml` is inspected
+- **THEN** `jsonData.username` SHALL be `analyst_readonly` and `secureJsonData.password` SHALL reference `$CLICKHOUSE_ANALYST_PASSWORD` rather than a literal password
+
+### Requirement: cdc-consumer-access-log
+Every consumer of the CDC Kafka topics SHALL emit a single startup event to the `governance.access_log` Kafka topic on process start. The event SHALL be a JSON object containing `event: "consumer_start"`, `principal`, `topics` (the subscribed set), `timestamp`, `host`, and `pid`. Failure to emit SHALL be logged but SHALL NOT block the consumer.
+
+#### Scenario: Spark CDC job emits startup event
+- **WHEN** `data-platform/streaming/spark/apps/run_cdc_job.py` starts a job with `--job-type customers`
+- **THEN** exactly one event with `principal = "spark-customers-cdc"` and `topics = ["pg.public.customers"]` SHALL be published to `governance.access_log`
+
+#### Scenario: Streamlit Kafka monitor emits startup event
+- **WHEN** a Streamlit session opens the Kafka monitor view for the first time
+- **THEN** exactly one event with `principal = "streamlit-kafka-monitor"` SHALL be published to `governance.access_log` for the session

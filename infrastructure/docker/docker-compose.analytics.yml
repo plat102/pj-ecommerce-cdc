@@ -9,9 +9,11 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ecommerce_analytics}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse123}
+      CLICKHOUSE_ANALYST_PASSWORD: ${CLICKHOUSE_ANALYST_PASSWORD:-analyst_readonly_change_me}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
+      - ./clickhouse/create_governance_users.sh:/docker-entrypoint-initdb.d/create_governance_users.sh
     networks:
       - ecommerce-network
     ulimits:
@@ -30,6 +32,7 @@ services:
       GF_INSTALL_PLUGINS: >
         grafana-clickhouse-datasource ${GRAFANA_CLICKHOUSE_PLUGIN_VERSION:-4.8.2}
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: vertamedia-clickhouse-datasource
+      CLICKHOUSE_ANALYST_PASSWORD: ${CLICKHOUSE_ANALYST_PASSWORD:-analyst_readonly_change_me}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning

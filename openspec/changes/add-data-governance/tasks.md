@@ -16,13 +16,13 @@
 
 ## 2. Phase 2 — PII / Access Control / Audit (Pillar 3)
 
-- [ ] 2.1 Add `hash_pii_udf` to `data-platform/streaming/spark/src/utils/udfs.py`
-- [ ] 2.2 Apply hashing/tokenization in `customer_transformer.py`
-- [ ] 2.3 Add `PII_SALT` to `.env.example` and document salt rotation procedure
-- [ ] 2.4 Create ClickHouse `analyst_readonly` role + row policies (in `infrastructure/docker/clickhouse/create_tables.sql`); add `CLICKHOUSE_ANALYST_PASSWORD` to `.env.example`; update `infrastructure/docker/grafana/provisioning/datasources/clickhouse.yml` to set `username: analyst_readonly` and reference the new env var for the password
-- [ ] 2.5 Create `governance.access_log` Kafka topic; emit a startup event from each Spark job and the Streamlit Kafka monitor
-- [ ] 2.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `pii-hashing-customers-email`, `pii-tokenization-customers-name`, `clickhouse-rbac-roles`, `cdc-consumer-access-log` (decomposed from the current `pii-classification` placeholder)
-- [ ] 2.7 Update `specs/analytics/spec.md` in this change dir with a `## MODIFIED Requirements` block covering the new `analyst_readonly` role, row policies, and Grafana datasource credential change
+- [x] 2.1 Add `hash_pii_udf` to `data-platform/streaming/spark/src/utils/udfs.py`
+- [x] 2.2 Apply hashing/tokenization in `customer_transformer.py`
+- [x] 2.3 Add `PII_SALT` to `.env.example` and document salt rotation procedure
+- [x] 2.4 Create ClickHouse `analyst_readonly` role + row policies (in `infrastructure/docker/clickhouse/create_tables.sql`); add `CLICKHOUSE_ANALYST_PASSWORD` to `.env.example`; update `infrastructure/docker/grafana/provisioning/datasources/clickhouse.yml` to set `username: analyst_readonly` and reference the new env var for the password
+- [x] 2.5 Create `governance.access_log` Kafka topic; emit a startup event from each Spark job and the Streamlit Kafka monitor
+- [x] 2.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `pii-hashing-customers-email`, `pii-tokenization-customers-name`, `clickhouse-rbac-roles`, `cdc-consumer-access-log` (decomposed from the current `pii-classification` placeholder)
+- [x] 2.7 Update `specs/analytics/spec.md` in this change dir with a `## MODIFIED Requirements` block covering the new `analyst_readonly` role, row policies, and Grafana datasource credential change
 
 ## 3. Phase 3 — Schema Registry + Data Quality (Pillar 1)
 
