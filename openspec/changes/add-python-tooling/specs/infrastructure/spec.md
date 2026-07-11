@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Placeholder additions for the design-only phase of `add-python-tooling`. The existing `infrastructure` spec (see `openspec/specs/infrastructure/spec.md`) covers Docker Compose lifecycle but does NOT currently declare a Python-environment convention or a `make test` target. This change adds those requirements to the `infrastructure` capability so that the Makefile-level behavior is spec-visible.
+> **Status:** Phase 1 (uv migration) requirements are now implemented. The existing `infrastructure` spec (see `openspec/specs/infrastructure/spec.md`) covers Docker Compose lifecycle but does NOT currently declare a Python-environment convention or a `make test` target. This change adds those requirements to the `infrastructure` capability so that the Makefile-level behavior is spec-visible.
 >
 > On archive, these requirements merge into `openspec/specs/infrastructure/spec.md` under a new subsection.
 

@@ -130,56 +130,31 @@ restart-connector: ## Restart PostgreSQL connector
 	@curl -X POST http://localhost:8083/connectors/pg-connector-ecommerce/restart || echo "❌ Failed to restart connector"
 
 #=====================================================
-# --- Python Environment ----------------------------
+# --- Python Environment (uv) ------------------------
 #=====================================================
 
-setup-venv: ## Setup Python virtual environment
-	./setup_venv.sh
+uv-sync: ## Create/update .venv from pyproject.toml + uv.lock (main + dev groups)
+	uv sync --group dev
 
-activate-venv: ## Show activation command
-	@echo "Run: source venv/bin/activate"
+uv-shell: ## Show activation command for the uv-managed venv
+	@echo "Run: . .venv/bin/activate"
+	@echo "Or prefix commands with: uv run <cmd>"
 
-clean-venv: ## Remove virtual environment
-	rm -rf venv
+uv-clean: ## Remove .venv and uv.lock (also purge legacy venv/ if present)
+	rm -rf .venv uv.lock venv
 
-check-venv: ## Check if virtual environment is active
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment is not active"; \
-		echo "💡 Run: source venv/bin/activate"; \
-		exit 1; \
-	else \
-		echo "✅ Virtual environment is active: $$VIRTUAL_ENV"; \
-	fi
-
-install-deps: check-venv ## Install Python dependencies (requires active venv)
-	pip install -r requirements.txt
-
-install-system-pip: ## Install pip system-wide (Ubuntu/Debian)
-	sudo apt update && sudo apt install python3-pip -y
-
-setup-python: ## Setup complete Python environment (system pip + venv + deps)
-	@echo "🐍 Setting up complete Python environment..."
-	@if ! command -v pip3 >/dev/null 2>&1; then \
-		echo "📦 Installing pip..."; \
-		sudo apt update && sudo apt install python3-pip -y; \
-	fi
-	@echo "📁 Setting up virtual environment..."
-	$(MAKE) setup-venv
-	@echo "✅ Python environment ready!"
-	@echo "💡 To activate: source venv/bin/activate"
-
-freeze-deps: ## Freeze current dependencies
-	pip freeze > requirements.txt
+test: ## Run pytest inside the uv-managed venv (exit 5 "no tests" treated as pass)
+	@uv run pytest; status=$$?; if [ $$status -eq 5 ]; then exit 0; else exit $$status; fi
 
 #=====================================================
 # --- Testing UI -------------------------------------
 #=====================================================
 
-run-ui-local: ## Start CDC Testing UI locally (requires active venv)
-	cd application/cdc-testing-ui && streamlit run app.py --server.port 8501
+run-ui-local: ## Start CDC Testing UI locally via uv (no manual activation needed)
+	cd application/cdc-testing-ui && uv run streamlit run app.py --server.port 8501
 
-check-ui-deps: ## Check if UI dependencies are installed
-	python -c "import streamlit, psycopg2, kafka, pandas, plotly; print('✅ All dependencies installed')"
+check-ui-deps: ## Check if UI dependencies are installed (uses .venv)
+	uv run python -c "import streamlit, psycopg2, kafka, pandas, plotly; print('All dependencies installed')"
 
 up-ui: ## Start CDC Testing UI as Docker service
 	$(COMPOSE) \
@@ -206,8 +181,8 @@ build-ui: ## Build CDC Testing UI Docker image
 logs-ui: ## Show CDC Testing UI logs
 	$(COMPOSE_UI) logs -f
 
-demo-data: ## Generate demo data for CDC testing (requires active venv)
-	cd application/cdc-testing-ui && python demo_data.py
+demo-data: ## Generate demo data for CDC testing via uv (no manual activation needed)
+	cd application/cdc-testing-ui && uv run python demo_data.py
 
 quick-start: ## Quick start for development (up + connector + demo data + ui)
 	@echo "🚀 Starting CDC development environment..."

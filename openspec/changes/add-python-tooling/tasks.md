@@ -9,18 +9,18 @@
 
 ## 1. Phase 1 — uv + `.venv/` Migration
 
-- [ ] 1.1 Rewrite `pyproject.toml` to PEP 621: replace `[tool.poetry]` and `[tool.poetry.dependencies]` with `[project]` (name, version, description, `requires-python = ">=3.9,<3.12"`, `dependencies = [...]`). Preserve the existing six deps, add `pyspark==3.3.0` to close the requirements.txt vs pyproject.toml divergence.
-- [ ] 1.2 Add `[dependency-groups]` block to `pyproject.toml` with a `dev` group containing `pytest`, `pytest-mock`, `pytest-cov`
-- [ ] 1.3 Run `uv lock` (host has uv 0.11.14 already) and commit the resulting `uv.lock`
-- [ ] 1.4 Delete `setup_venv.sh`
-- [ ] 1.5 Delete `requirements.txt`
-- [ ] 1.6 Rewrite the venv-family Makefile targets: retire `setup-venv`, `activate-venv`, `clean-venv`, `check-venv`, `install-deps`, `setup-python`; add `uv-sync` (runs `uv sync --group dev`), `uv-shell` (opens a subshell in the activated venv or prints activation hint), `uv-clean` (removes `.venv uv.lock` and any stale `venv/`). Update `run-ui-local` and `demo-data` help text to reference `uv run …` rather than the old `source venv/bin/activate` requirement.
-- [ ] 1.7 Update `infrastructure/docker/streamlit/Dockerfile` to a multi-stage build: stage 1 uses `ghcr.io/astral-sh/uv:0.11.14` (or `pip install uv==0.11.14`) to run `uv export --no-hashes --no-dev -o requirements.txt`; stage 2 runs `pip install -r requirements.txt` on the exported file. Runtime image does not contain uv.
-- [ ] 1.8 Add `.venv/` to `.gitignore` (retain `venv/` there defensively for developers with pre-migration state)
-- [ ] 1.9 Update `AGENTS.md` "Local Python env" and `CLAUDE.md` "Common commands / Local Python env" sections to reference the uv-based flow (`make uv-sync`, `uv run …`, or `. .venv/bin/activate`)
-- [ ] 1.10 Update `README.md` any references to `setup_venv.sh` / `requirements.txt` / `venv/`
-- [ ] 1.11 Update `specs/python-tooling/spec.md` in this change dir — add `## ADDED Requirements` for `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` (decomposed from the `dependency-management` placeholder)
-- [ ] 1.12 Update `specs/infrastructure/spec.md` in this change dir — record the retired Makefile targets and Dockerfile change under `## MODIFIED Requirements`
+- [x] 1.1 Rewrite `pyproject.toml` to PEP 621: replace `[tool.poetry]` and `[tool.poetry.dependencies]` with `[project]` (name, version, description, `requires-python = ">=3.9,<3.12"`, `dependencies = [...]`). Preserve the existing six deps, add `pyspark==3.3.0` to close the requirements.txt vs pyproject.toml divergence.
+- [x] 1.2 Add `[dependency-groups]` block to `pyproject.toml` with a `dev` group containing `pytest`, `pytest-mock`, `pytest-cov`
+- [x] 1.3 Run `uv lock` (host has uv 0.11.14 already) and commit the resulting `uv.lock`
+- [x] 1.4 Delete `setup_venv.sh`
+- [x] 1.5 Delete `requirements.txt`
+- [x] 1.6 Rewrite the venv-family Makefile targets: retire `setup-venv`, `activate-venv`, `clean-venv`, `check-venv`, `install-deps`, `setup-python`; add `uv-sync` (runs `uv sync --group dev`), `uv-shell` (opens a subshell in the activated venv or prints activation hint), `uv-clean` (removes `.venv uv.lock` and any stale `venv/`). Update `run-ui-local` and `demo-data` help text to reference `uv run …` rather than the old `source venv/bin/activate` requirement.
+- [x] 1.7 Update `infrastructure/docker/streamlit/Dockerfile` to a multi-stage build: stage 1 uses `ghcr.io/astral-sh/uv:0.11.14` (or `pip install uv==0.11.14`) to run `uv export --no-hashes --no-dev -o requirements.txt`; stage 2 runs `pip install -r requirements.txt` on the exported file. Runtime image does not contain uv.
+- [x] 1.8 Add `.venv/` to `.gitignore` (retain `venv/` there defensively for developers with pre-migration state)
+- [x] 1.9 Update `AGENTS.md` "Local Python env" and `CLAUDE.md` "Common commands / Local Python env" sections to reference the uv-based flow (`make uv-sync`, `uv run …`, or `. .venv/bin/activate`)
+- [x] 1.10 Update `README.md` any references to `setup_venv.sh` / `requirements.txt` / `venv/`
+- [x] 1.11 Update `specs/python-tooling/spec.md` in this change dir — add `## ADDED Requirements` for `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` (decomposed from the `dependency-management` placeholder)
+- [x] 1.12 Update `specs/infrastructure/spec.md` in this change dir — record the retired Makefile targets and Dockerfile change under `## MODIFIED Requirements`
 
 ## 2. Phase 2 — Test Infrastructure (skeleton, no tests)
 

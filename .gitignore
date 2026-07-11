@@ -4,6 +4,7 @@
 .env.*.local
 
 # Python Virtual Environment
+.venv/
 venv/
 *.pyc
 __pycache__/

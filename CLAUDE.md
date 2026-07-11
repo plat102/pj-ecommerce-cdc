@@ -45,7 +45,9 @@ Dashboards:
 - `make reload-grafana` — sync + restart Grafana container
 
 Local Python env:
-- `make setup-venv` — runs `setup_venv.sh`, creates `./venv` from `requirements.txt`. There is no project-level test or lint configuration; no test command exists.
+- `make uv-sync` — creates `./.venv` from `pyproject.toml` + `uv.lock` (main + dev groups). No manual activation needed for `make` targets; they use `uv run` internally. For interactive work: `. .venv/bin/activate` or prefix commands with `uv run`.
+- `make test` — runs `uv run pytest` (exit code 5 "no tests collected" is mapped to 0).
+- `make uv-clean` — removes `.venv/`, `uv.lock`, and any stale `venv/`.
 
 Shell access:
 - `make sh-pg`, `make sh-kafka`, `make sh-debezium`, `make sh-spark`, `make clickhouse-client`
