@@ -3,8 +3,8 @@
 The project runs two Python codebases (`application/cdc-testing-ui/` — 16 modules; `data-platform/streaming/spark/src/` — 27 modules + `apps/run_cdc_job.py`) and has none of the machinery that usually surrounds Python code at this scale:
 
 - No tests. No `pytest.ini`, no `conftest.py`, no `tests/` directory. Nothing is unit-checked; regressions surface only when the stack runs end-to-end.
-- Two dependency manifests. `pyproject.toml` has a Poetry-1.x block with six deps; `requirements.txt` pins the same six *plus* `pyspark==3.3.0`. The manifests are already out of sync in a load-bearing way — Poetry cannot install what Spark needs today.
-- `setup_venv.sh` creates `venv/` (not `.venv/`) via plain `python -m venv` + `pip install -r requirements.txt`. Poetry is installed on the host (2.3.2) but not used by the setup path — the pyproject file exists as a decorative artifact.
+- Two dependency manifests. `pyproject.toml` has a Poetry-1.x `[tool.poetry]` block with six deps; `requirements.txt` pins the same six *plus* `pyspark==3.3.0`. The manifests are already out of sync in a load-bearing way — nothing in the current setup path installs from `pyproject.toml` at all.
+- `setup_venv.sh` creates `venv/` (not `.venv/`) via plain `python -m venv` + `pip install -r requirements.txt`. The pyproject file exists as a decorative artifact — no tool in the current workflow reads it.
 - Makefile encodes the venv convention across seven targets, all of which will need to move together.
 
 This document is the design for a new `python-tooling` OpenSpec capability that consolidates these concerns. It does **not** create the file tree or edit any Python packaging files yet — those follow once the design direction is approved.
@@ -12,9 +12,9 @@ This document is the design for a new `python-tooling` OpenSpec capability that 
 ## Goals / Non-Goals
 
 **Goals:**
-- Single source of dependency truth: `pyproject.toml`. `poetry.lock` is committed for reproducibility.
-- Single virtual-environment convention: `.venv/` in-project, managed by Poetry.
-- A working `make test` target that runs `pytest` inside the Poetry venv and succeeds even before any tests exist.
+- Single source of dependency truth: `pyproject.toml` using the PEP 621 `[project]` table. `uv.lock` is committed for reproducibility.
+- Single virtual-environment convention: `.venv/` in-project, managed by uv.
+- A working `make test` target that runs `pytest` inside the uv-managed venv and succeeds even before any tests exist.
 - Unit tests for the pure-function surface of both codebases — enough to catch a broken transformer or a broken database-manager call in seconds instead of minutes.
 - All governance guarantees expressible as OpenSpec requirements so `make spec-validate` can verify them structurally.
 
@@ -24,49 +24,50 @@ This document is the design for a new `python-tooling` OpenSpec capability that 
 - End-to-end tests that require a running stack (Docker Compose, real Kafka, real ClickHouse).
 - Streamlit view tests. Streamlit's testing framework is worth it later, but views are 80% of `application/cdc-testing-ui/` and would inflate this change past its useful weight.
 - Migrating the Spark container's Python. `ed-pyspark-jupyter` uses a pre-built image with `pyspark` baked in, and mounts source as a volume — no pip step to migrate.
-- Bumping `python = "^3.9"` or any pinned version. This change reorganizes tooling; it does not upgrade libraries.
+- Bumping `requires-python` or any pinned library version. This change reorganizes tooling; it does not upgrade libraries.
 
 ## Three Pillars
 
 Tooling is structured into three pillars, each independently shippable. Ship in order; stop at any phase if value is sufficient.
 
-### Pillar 1 — Dependency Management (Poetry)
+### Pillar 1 — Dependency Management (uv)
 
-**Tool choice:** Poetry 2.3.2 (already installed on host).
+**Tool choice:** uv 0.11.14 (already installed on host at `~/.local/bin/uv`).
 
 **Behavior the spec will encode:**
-- `pyproject.toml` declares all runtime dependencies (Streamlit UI + Spark). `pyspark = "3.3.0"` (currently missing) joins the main group.
-- A `[tool.poetry.group.dev.dependencies]` group declares `pytest`, `pytest-mock`, and `pytest-cov`. Optional groups can be added later (docs, lint) without touching this contract.
-- `poetry.lock` is committed to the repo. Reproducible installs across machines mean "works on my box" is a genuine claim, not a probability.
-- `requirements.txt` no longer exists. Any tool that needs a pip-compatible manifest generates it via `poetry export --without-hashes -o requirements.txt` at build time (used by the Streamlit Dockerfile if we can't run Poetry inside the build).
+- `pyproject.toml` uses the PEP 621 `[project]` table (no `[tool.poetry]`). It declares all runtime dependencies (Streamlit UI + Spark). `pyspark==3.3.0` (currently missing from pyproject) joins the main dependency list.
+- A `[dependency-groups]` table declares a `dev` group with `pytest`, `pytest-mock`, and `pytest-cov`. Optional groups can be added later (docs, lint) without touching this contract.
+- `uv.lock` is committed to the repo. Reproducible installs across machines mean "works on my box" is a genuine claim, not a probability.
+- `requirements.txt` no longer exists in the repo. Any tool that needs a pip-compatible manifest generates it via `uv export --no-hashes -o requirements.txt` at build time (used by the Streamlit Dockerfile).
 
 **Where it plugs in (reuse, don't rebuild):**
-- `pyproject.toml` — extend the existing `[tool.poetry]` section. Add `pyspark`, then the dev group, then a `[tool.pytest.ini_options]` block (Pillar 3).
-- `infrastructure/docker/streamlit/Dockerfile` — replace the `COPY requirements.txt` + `pip install -r` pair with either (a) `pip install poetry && poetry install --no-root --only main` in the build stage, or (b) a multi-stage build that generates `requirements.txt` via `poetry export` before pip installs it. Option (b) keeps the container thin.
+- `pyproject.toml` — replace the `[tool.poetry]` + `[tool.poetry.dependencies]` blocks with `[project]` + `dependencies = [...]`. Add `pyspark`, then the `[dependency-groups]` dev group, then a `[tool.pytest.ini_options]` block (Pillar 3).
+- `infrastructure/docker/streamlit/Dockerfile` — multi-stage build. Stage 1 uses `ghcr.io/astral-sh/uv:0.11.14` (or `pip install uv`) to run `uv export --no-hashes --no-dev -o requirements.txt`. Stage 2 runs `pip install -r requirements.txt` on the exported file. This keeps the runtime image lean (uv is not in the final layer) and preserves lockfile fidelity.
 
 **New files:**
-- `poetry.toml` — project-scoped Poetry config (`[virtualenvs] in-project = true`). Enforces `.venv/` inside the repo regardless of the developer's global Poetry config.
-- `poetry.lock` — committed lockfile.
+- `uv.lock` — committed lockfile (generated by `uv lock`).
+
+**No `poetry.toml` equivalent needed:** uv creates `.venv/` in the working directory by default when `uv sync` is invoked from the project root. Behavior is repo-scoped without a config file.
 
 ### Pillar 2 — Virtual Environment Convention (`.venv/`)
 
-**Tool choice:** Poetry's in-project venv mode, enforced by `poetry.toml`.
+**Tool choice:** uv's default in-project venv behavior.
 
 **Behavior the spec will encode:**
 - The canonical venv path is `.venv/` at the repo root. `venv/` is retired.
-- `setup_venv.sh` is deleted. It has one job — create a venv and pip-install — which `poetry install` now does with a lockfile.
-- Seven venv-family Makefile targets collapse into a smaller Poetry-based set:
+- `setup_venv.sh` is deleted. It has one job — create a venv and pip-install — which `uv sync` now does with a lockfile.
+- Seven venv-family Makefile targets collapse into a smaller uv-based set:
   - `setup-venv`, `activate-venv`, `clean-venv`, `check-venv`, `install-deps`, `setup-python` → **removed**.
-  - New: `poetry-install` (main + dev), `poetry-shell` (activate), `poetry-clean` (rm `.venv poetry.lock`).
-  - `run-ui-local`, `demo-data` — help text updated; they now assume Poetry venv rather than the old `source venv/bin/activate` prerequisite.
+  - New: `uv-sync` (runs `uv sync --group dev`), `uv-shell` (prints activation hint or runs `. .venv/bin/activate` via a subshell), `uv-clean` (`rm -rf .venv uv.lock`).
+  - `run-ui-local`, `demo-data` — help text updated; they now assume the uv-managed venv rather than the old `source venv/bin/activate` prerequisite. Both can be run directly as `uv run streamlit ...` / `uv run python ...` without an explicit activation step.
 - `.gitignore` includes `.venv/` (and, defensively, `venv/` for prior local state).
 
 **Where it plugs in:**
 - `Makefile` — one Python-Environment section rewrite.
-- `README.md` and `AGENTS.md` — "Local Python env" bullets updated to reference Poetry commands.
+- `README.md` and `AGENTS.md` — "Local Python env" bullets updated to reference uv commands.
 - `CLAUDE.md` — the same references.
 
-**Tradeoff:** Some developers keep venvs in a central location (`~/.venvs/`, `pyenv virtualenv`, etc.). Forcing in-project is opinionated but eliminates a class of "which env did I install into" bugs. The `poetry.toml` file makes the choice repo-scoped, not developer-global — teammates who prefer central venvs elsewhere are unaffected in other projects.
+**Tradeoff:** Some developers keep venvs in a central location (`~/.venvs/`, `pyenv virtualenv`, etc.). uv's default is in-project, which is opinionated but eliminates a class of "which env did I install into" bugs. Developers who want a different location can set `UV_PROJECT_ENVIRONMENT`; the default keeps behavior repo-scoped without any config file in the repo.
 
 ### Pillar 3 — Test Infrastructure
 
@@ -98,7 +99,7 @@ Tooling is structured into three pillars, each independently shippable. Ship in 
   ]
   addopts = "-ra --strict-markers"
   ```
-- `make test` runs `poetry run pytest`. Succeeds with `no tests ran` (exit 5 mapped to green — pytest's `--exitfirst-strict` is off by default). Once tests exist, exit 0 is the target.
+- `make test` runs `uv run pytest`. Succeeds with `no tests ran` (exit 5 mapped to green — pytest's `--exitfirst-strict` is off by default). Once tests exist, exit 0 is the target.
 - Phase 3 initial test surface:
   - Each per-table transformer (`customers_cdc_transformer.py`, `product_cdc_transformer.py`, `order_cdc_transformer.py`) has at least one happy-path test that builds a sample Kafka payload DataFrame, runs the transformer, and asserts the output schema and one row's `_version` / `_deleted` values.
   - `decode_decimal_udf` in `src/utils/udfs.py` has round-trip tests (encode a decimal → decode → assert equality) plus null-handling.
@@ -113,42 +114,45 @@ Tooling is structured into three pillars, each independently shippable. Ship in 
 
 ## Decisions
 
-**Poetry, not pip-tools or uv**
-Poetry is already installed and already partially in the pyproject. Switching to uv would be faster at install time but introduces a *third* tool state (uv, pip, poetry). Sticking with Poetry closes the loop with the least new muscle memory. uv is worth revisiting when the team wants CI speed more than familiarity.
+**uv, not Poetry or pip-tools**
+uv is ~10× faster at install/resolve than Poetry, uses standard PEP 621 metadata (no vendor-specific `[tool.poetry]` block), and its lockfile format is designed for the modern packaging ecosystem. It's already installed on the host. The alternative (Poetry) was considered because the existing `[tool.poetry]` block hinted at prior intent — but uv's speed and standards-alignment outweigh the churn cost of rewriting the pyproject header once. Poetry stays viable as a fallback if uv proves unstable, but 0.11.x is well past its shakedown.
 
-**In-project `.venv/`, enforced by `poetry.toml`**
-Global Poetry config varies across developers. A `poetry.toml` inside the repo pins the choice to this project only. Also plays well with IDE Python interpreters, which reliably pick up `.venv/` at the workspace root.
+**PEP 621 `[project]`, not `[tool.poetry]`**
+uv can read `[tool.poetry]` metadata via a compatibility layer, but the standard is `[project]`. Mixing both is confusing and the compat layer is a graceful-degradation path, not a first-class one. Cheaper to write the header once now than to leave a hybrid pyproject that future contributors will misread.
 
-**`poetry.lock` committed**
-Reproducibility is the whole point. The alternative (add `poetry.lock` to `.gitignore`) turns "same commit, same deps" into a probability. Not worth the bytes saved.
+**In-project `.venv/`, no config file needed**
+uv's default already places the venv at `.venv/` in the project root when invoked from that root. Unlike Poetry (which needs `poetry.toml` to override a global setting), uv doesn't require a repo-level config for this — the default is right. Fewer files to explain.
+
+**`uv.lock` committed**
+Reproducibility is the whole point. The alternative (add `uv.lock` to `.gitignore`) turns "same commit, same deps" into a probability. Not worth the bytes saved. `uv.lock` is a text file (TOML), so diffs are reviewable.
 
 **One `python-tooling` capability, not requirements scattered across `infrastructure`**
 Dep management, venv convention, and test infrastructure are one concern (how Python is developed). Splitting them across `infrastructure` (venv) and elsewhere (tests) makes it impossible to audit "what does Python tooling guarantee" in one place. The `python-tooling` capability owns the requirements; `infrastructure` carries MODIFIED deltas where tooling changes its observable behavior (Makefile, Dockerfile).
 
 **Tests live at repo root, not per-codebase**
-An alternative layout would be `application/cdc-testing-ui/tests/` + `data-platform/streaming/spark/tests/`. That plays better if we ever split those into separate Python packages. Today they're one repo with one Poetry venv; a single `tests/` tree at the root is simpler for `pytest` discovery, coverage aggregation, and `make test`. If we ever split the repo, the tests split with the source.
+An alternative layout would be `application/cdc-testing-ui/tests/` + `data-platform/streaming/spark/tests/`. That plays better if we ever split those into separate Python packages. Today they're one repo with one uv-managed venv; a single `tests/` tree at the root is simpler for `pytest` discovery, coverage aggregation, and `make test`. If we ever split the repo, the tests split with the source.
 
 **Streamlit views are out of scope**
 Views are `st.columns()` + `st.metric()` calls with `st.session_state` mutation. Testing them meaningfully requires either Streamlit's testing framework (which was still labeled experimental at the time of writing) or an e2e stack. Neither belongs in a change that's already juggling three pillars. Views get a later change.
 
 ## Risks / Trade-offs
 
-**Poetry `install --no-root` in the Dockerfile still installs Poetry**
-The Streamlit Dockerfile switching to Poetry means the build image gets ~30MB heavier (Poetry itself). Mitigation: multi-stage build where the first stage runs `poetry export` and the second stage runs `pip install -r requirements.txt` on the generated file. Container stays lean; `requirements.txt` still exists at build time but not in the repo.
+**Multi-stage Dockerfile needs uv in stage 1**
+The Streamlit Dockerfile switching to a uv-based build means stage 1 needs uv installed (either from the `ghcr.io/astral-sh/uv` image or via `pip install uv`). Runtime stage stays lean — it only sees the exported `requirements.txt`. Trade-off: build time gains one image pull but loses nothing at runtime.
 
 **pyspark install failure with certain Python versions**
-`pyspark==3.3.0` on Python 3.12+ has known compatibility issues. Current pin is `python = "^3.9"`, so 3.12 is technically allowed but not exercised. Mitigation: keep the caret constraint; document that CI (when it arrives) should pin to 3.11.
+`pyspark==3.3.0` on Python 3.12+ has known compatibility issues. Current `requires-python` will be pinned to `>=3.9,<3.12` in the new `[project]` block to prevent accidental 3.12 use. Mitigation: document that CI (when it arrives) should pin to 3.11.
 
 **Deleting `venv/` on machines that have one**
-Developers who ran `make setup-venv` before this change have `venv/` in their working tree. It's gitignored, so deleting the target won't touch it — but they should be told to `rm -rf venv && poetry install`. Mitigation: `poetry-clean` target removes both `.venv/` and any stale `venv/` (best-effort), and the PROPOSAL.md's user-facing rollout note calls this out.
+Developers who ran `make setup-venv` before this change have `venv/` in their working tree. It's gitignored, so deleting the target won't touch it — but they should be told to `rm -rf venv && make uv-sync`. Mitigation: `uv-clean` target removes both `.venv/` and any stale `venv/` (best-effort), and the PROPOSAL.md's user-facing rollout note calls this out.
 
 **Streamlit Dockerfile's install-time behavior changes**
 The image tag will shift because layers change. Cached builds may need `--no-cache` on first rebuild. Low-frequency issue; documented in the rollout note.
 
 **Adding pyspark to `pyproject.toml` produces a heavy install**
-`pyspark==3.3.0` is ~200MB. Every developer running `poetry install` downloads it, even those touching only the Streamlit UI. Mitigation: put `pyspark` in an optional group (`[tool.poetry.group.spark.dependencies]`) so `poetry install` installs only main+dev and Spark work requires `poetry install --with spark`. Trade-off: adds a `--with` flag to onboarding docs. Decision below.
+`pyspark==3.3.0` is ~200MB. Every developer running `uv sync` downloads it, even those touching only the Streamlit UI. Mitigation: put `pyspark` in an optional dependency group (`[dependency-groups] spark`) so `uv sync` installs only main+dev and Spark work requires `uv sync --group spark`. Trade-off: adds a `--group` flag to onboarding docs. Decision below.
 
-**Decision on optional Spark group:** Ship `pyspark` in the *main* dependency group. The project's whole reason to exist is Spark streaming; the Streamlit UI is a testing harness. Optionality would optimize for a use case that doesn't exist here.
+**Decision on optional Spark group:** Ship `pyspark` in the *main* dependency list. The project's whole reason to exist is Spark streaming; the Streamlit UI is a testing harness. Optionality would optimize for a use case that doesn't exist here.
 
 **Spark UDFs and PySpark session in unit tests are slow**
 Local Spark sessions take 3–7s to spin up. Multiplying that across many test files is annoying. Mitigation: `session_spark` fixture is `scope="session"` in `tests/spark/conftest.py` — spun up once per `pytest` invocation. Individual tests use `spark_session` locally, which just returns the shared instance.
@@ -156,23 +160,26 @@ Local Spark sessions take 3–7s to spin up. Multiplying that across many test f
 **`pythonpath = [...]` in pyproject means IDE auto-import may not know where to look**
 Some IDEs read `sys.path` from a `.pth` file or a `[tool.pyright]` config, not from `[tool.pytest.ini_options]`. Mitigation: add both `src` roots to `[tool.pyright]` (or equivalent) later if IDE ergonomics become a friction point. Not in scope for this change.
 
+**uv version drift**
+uv is pre-1.0 (0.11.x). Behavior may shift between minor versions. Mitigation: pin the exact uv version referenced in the Dockerfile (`ghcr.io/astral-sh/uv:0.11.14`), and document the host uv version in AGENTS.md. Local developers on newer uv should be fine because `uv.lock` is authoritative for resolution.
+
 ## Phased Rollout
 
 Each phase is independently shippable; ship in order, but stop at any phase if value is sufficient.
 
-**Phase 1 — Poetry + `.venv/` Migration (Pillar 1 + Pillar 2)**
+**Phase 1 — uv + `.venv/` Migration (Pillar 1 + Pillar 2)**
 - Pure tooling; no test code.
-- Exit criteria: `poetry install` succeeds; `.venv/` exists at repo root and is what Poetry uses; `make up-ui` still builds and runs (Streamlit container works via Poetry-based build); `make run-ui-local` works from `.venv/` with no manual `source` needed (Poetry-shell or `poetry run streamlit run …`); `requirements.txt` and `setup_venv.sh` are gone; `poetry.lock` is committed.
+- Exit criteria: `uv sync` succeeds; `.venv/` exists at repo root and is what uv uses; `make up-ui` still builds and runs (Streamlit container works via uv-based build); `make run-ui-local` works from `.venv/` with no manual `source` needed (`uv run streamlit run …`); `requirements.txt` and `setup_venv.sh` are gone; `uv.lock` is committed; `pyproject.toml` is now PEP 621.
 - Highest risk-reduction per line of code: eliminates the manifest-divergence footgun.
 
 **Phase 2 — Test Infrastructure (Pillar 3 skeleton)**
 - Zero test code; only the scaffolding.
-- Exit criteria: `tests/` directory tree exists; `conftest.py` files exist (empty is fine); `[tool.pytest.ini_options]` block declares `testpaths` and `pythonpath`; `make test` runs `poetry run pytest` and exits 0 with "no tests ran".
+- Exit criteria: `tests/` directory tree exists; `conftest.py` files exist (empty is fine); `[tool.pytest.ini_options]` block declares `testpaths` and `pythonpath`; `make test` runs `uv run pytest` and exits 0 with "no tests ran".
 - Low risk. Sets up the surface for Phase 3.
 
 **Phase 3 — Initial Unit Tests (Pillar 3 content)**
 - The actual test payload. Covers pure-function surfaces of both codebases.
-- Exit criteria: `make test` collects >= 20 tests and they all pass. Coverage report (via `pytest --cov=data-platform/streaming/spark/src --cov=application/cdc-testing-ui`) shows > 30% on Spark src (limited by the untested job classes) and > 50% on Streamlit managers (excluding views).
+- Exit criteria: `make test` collects >= 20 tests and they all pass. Coverage report (via `uv run pytest --cov=data-platform/streaming/spark/src --cov=application/cdc-testing-ui`) shows > 30% on Spark src (limited by the untested job classes) and > 50% on Streamlit managers (excluding views).
 - Highest ongoing value: this is where regressions start to be catchable in seconds.
 
 ## Requirements That Will Be Declared
@@ -181,13 +188,13 @@ These will become `### Requirement:` blocks in `openspec/specs/python-tooling/sp
 
 | Pillar | Requirement (kebab-name) | One-line summary |
 |--------|--------------------------|------------------|
-| 1 | `poetry-single-source-deps` | `pyproject.toml` is the single source of dep truth; no `requirements.txt` in the repo |
-| 1 | `poetry-in-project-venv` | Poetry configured via `poetry.toml` to place `.venv/` in the project root |
-| 1 | `poetry-lock-committed` | `poetry.lock` is tracked in git for reproducible installs |
-| 1 | `streamlit-dockerfile-poetry` | Streamlit Dockerfile builds via Poetry (`poetry export` + pip, or direct `poetry install`) |
+| 1 | `uv-single-source-deps` | `pyproject.toml` (PEP 621) is the single source of dep truth; no `requirements.txt` in the repo |
+| 1 | `uv-in-project-venv` | uv places `.venv/` in the project root by default; no repo-scoped config file needed |
+| 1 | `uv-lock-committed` | `uv.lock` is tracked in git for reproducible installs |
+| 1 | `streamlit-dockerfile-uv` | Streamlit Dockerfile builds via a multi-stage `uv export` → pip install pipeline |
 | 2 | `pytest-config-in-pyproject` | `[tool.pytest.ini_options]` declares `testpaths` and both codebases in `pythonpath` |
 | 2 | `tests-directory-layout` | `tests/spark/` and `tests/streamlit/` exist with `conftest.py` files |
-| 2 | `make-test-target` | `make test` runs `poetry run pytest` and exits 0 even with zero collected tests |
+| 2 | `make-test-target` | `make test` runs `uv run pytest` and exits 0 even with zero collected tests |
 | 3 | `spark-transformer-tests` | Each per-table transformer has at least one happy-path unit test |
 | 3 | `spark-udf-tests` | `decode_decimal_udf` (and any future PII UDFs) has round-trip and null-handling tests |
 | 3 | `streamlit-manager-tests` | `DatabaseManager` and `KafkaManager` have mocked-client happy-path tests |
@@ -198,7 +205,7 @@ Tooling changes observable behavior already covered by other specs. Repo convent
 
 Tooling-driven MODIFIED requirements land in:
 
-- **`infrastructure`**: Seven venv-related Makefile targets retire in favor of three Poetry-based ones plus `make test`; `setup_venv.sh` is deleted; `infrastructure/docker/streamlit/Dockerfile` builds via Poetry rather than `pip install -r requirements.txt`.
+- **`infrastructure`**: Seven venv-related Makefile targets retire in favor of three uv-based ones plus `make test`; `setup_venv.sh` is deleted; `infrastructure/docker/streamlit/Dockerfile` builds via a multi-stage `uv export` → pip install pipeline rather than `pip install -r requirements.txt` against a repo-tracked file.
 
 No other capability is touched. `cdc-pipeline`, `analytics`, `streamlit-ui`, and `data-governance` are unaffected in their observable behavior — those capabilities describe *what the system does*, and this change reorganizes *how developers work on it*.
 

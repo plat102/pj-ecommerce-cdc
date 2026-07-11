@@ -5,23 +5,22 @@
 - [x] 0.3 Write TASKS.md (this file)
 - [x] 0.4 Write initial `specs/python-tooling/spec.md` with placeholder requirements and the placeholder → phase-scoped mapping table
 - [x] 0.5 Write `specs/infrastructure/spec.md` (MODIFIED) for the venv/Makefile/Dockerfile changes
-- [ ] 0.6 User approves design direction before implementation begins
+- [x] 0.6 User approves design direction before implementation begins
 
-## 1. Phase 1 — Poetry + `.venv/` Migration
+## 1. Phase 1 — uv + `.venv/` Migration
 
-- [ ] 1.1 Add `pyspark = "3.3.0"` to the main dependency group in `pyproject.toml` (closes the requirements.txt vs pyproject.toml divergence)
-- [ ] 1.2 Add `[tool.poetry.group.dev.dependencies]` block to `pyproject.toml` with `pytest`, `pytest-mock`, `pytest-cov`
-- [ ] 1.3 Create `poetry.toml` at the repo root with `[virtualenvs] in-project = true` so `.venv/` lives inside the repo regardless of developer global config
-- [ ] 1.4 Run `poetry lock` (host has Poetry 2.3.2 already) and commit the resulting `poetry.lock`
-- [ ] 1.5 Delete `setup_venv.sh`
-- [ ] 1.6 Delete `requirements.txt`
-- [ ] 1.7 Rewrite the venv-family Makefile targets: retire `setup-venv`, `activate-venv`, `clean-venv`, `check-venv`, `install-deps`, `setup-python`; add `poetry-install` (runs `poetry install --with dev`), `poetry-shell` (runs `poetry shell`), `poetry-clean` (removes `.venv poetry.lock` and any stale `venv/`). Update `run-ui-local` and `demo-data` help text to reference Poetry rather than the old `source venv/bin/activate` requirement.
-- [ ] 1.8 Update `infrastructure/docker/streamlit/Dockerfile`: use a multi-stage build where stage 1 runs `poetry export --without-hashes -o requirements.txt` and stage 2 `pip install -r` the exported file. Alternative acceptable: `pip install poetry && poetry install --no-root --only main` in a single stage.
-- [ ] 1.9 Add `.venv/` to `.gitignore` (retain `venv/` there defensively for developers with pre-migration state)
-- [ ] 1.10 Update `AGENTS.md` "Local Python env" and `CLAUDE.md` "Common commands / Local Python env" sections to reference the Poetry-based flow (`make poetry-install`, `poetry shell`)
-- [ ] 1.11 Update `README.md` any references to `setup_venv.sh` / `requirements.txt` / `venv/`
-- [ ] 1.12 Update `specs/python-tooling/spec.md` in this change dir — add `## ADDED Requirements` for `poetry-single-source-deps`, `poetry-in-project-venv`, `poetry-lock-committed`, `streamlit-dockerfile-poetry` (decomposed from the `dependency-management` placeholder)
-- [ ] 1.13 Update `specs/infrastructure/spec.md` in this change dir — record the retired Makefile targets and Dockerfile change under `## MODIFIED Requirements`
+- [ ] 1.1 Rewrite `pyproject.toml` to PEP 621: replace `[tool.poetry]` and `[tool.poetry.dependencies]` with `[project]` (name, version, description, `requires-python = ">=3.9,<3.12"`, `dependencies = [...]`). Preserve the existing six deps, add `pyspark==3.3.0` to close the requirements.txt vs pyproject.toml divergence.
+- [ ] 1.2 Add `[dependency-groups]` block to `pyproject.toml` with a `dev` group containing `pytest`, `pytest-mock`, `pytest-cov`
+- [ ] 1.3 Run `uv lock` (host has uv 0.11.14 already) and commit the resulting `uv.lock`
+- [ ] 1.4 Delete `setup_venv.sh`
+- [ ] 1.5 Delete `requirements.txt`
+- [ ] 1.6 Rewrite the venv-family Makefile targets: retire `setup-venv`, `activate-venv`, `clean-venv`, `check-venv`, `install-deps`, `setup-python`; add `uv-sync` (runs `uv sync --group dev`), `uv-shell` (opens a subshell in the activated venv or prints activation hint), `uv-clean` (removes `.venv uv.lock` and any stale `venv/`). Update `run-ui-local` and `demo-data` help text to reference `uv run …` rather than the old `source venv/bin/activate` requirement.
+- [ ] 1.7 Update `infrastructure/docker/streamlit/Dockerfile` to a multi-stage build: stage 1 uses `ghcr.io/astral-sh/uv:0.11.14` (or `pip install uv==0.11.14`) to run `uv export --no-hashes --no-dev -o requirements.txt`; stage 2 runs `pip install -r requirements.txt` on the exported file. Runtime image does not contain uv.
+- [ ] 1.8 Add `.venv/` to `.gitignore` (retain `venv/` there defensively for developers with pre-migration state)
+- [ ] 1.9 Update `AGENTS.md` "Local Python env" and `CLAUDE.md` "Common commands / Local Python env" sections to reference the uv-based flow (`make uv-sync`, `uv run …`, or `. .venv/bin/activate`)
+- [ ] 1.10 Update `README.md` any references to `setup_venv.sh` / `requirements.txt` / `venv/`
+- [ ] 1.11 Update `specs/python-tooling/spec.md` in this change dir — add `## ADDED Requirements` for `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` (decomposed from the `dependency-management` placeholder)
+- [ ] 1.12 Update `specs/infrastructure/spec.md` in this change dir — record the retired Makefile targets and Dockerfile change under `## MODIFIED Requirements`
 
 ## 2. Phase 2 — Test Infrastructure (skeleton, no tests)
 
@@ -29,10 +28,10 @@
 - [ ] 2.2 Create `tests/spark/conftest.py` with a session-scoped `SparkSession.builder.master('local[*]').appName('unit-tests').getOrCreate()` fixture and helper fixtures for sample Kafka payload DataFrames
 - [ ] 2.3 Create `tests/streamlit/conftest.py` with mock fixtures (`mock_psycopg2_connect`, `mock_kafka_producer`, `mock_kafka_consumer`)
 - [ ] 2.4 Add `[tool.pytest.ini_options]` block to `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["data-platform/streaming/spark/src", "application/cdc-testing-ui"]`, `addopts = "-ra --strict-markers"`
-- [ ] 2.5 Add a `make test` Makefile target that runs `poetry run pytest`
+- [ ] 2.5 Add a `make test` Makefile target that runs `uv run pytest`
 - [ ] 2.6 Verify: `make test` exits 0 (or maps pytest's "no tests collected" exit 5 to 0 via `pytest --exitfirst` config)
 - [ ] 2.7 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` (decomposed from the `test-infrastructure` placeholder)
-- [ ] 2.8 Update `specs/infrastructure/spec.md` — add `## MODIFIED Requirements` (or extend the block from 1.13) to mention `make test` as a canonical target
+- [ ] 2.8 Update `specs/infrastructure/spec.md` — add `## MODIFIED Requirements` (or extend the block from 1.12) to mention `make test` as a canonical target
 
 ## 3. Phase 3 — Initial Unit Tests
 

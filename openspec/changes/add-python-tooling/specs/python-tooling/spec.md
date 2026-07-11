@@ -6,23 +6,23 @@
 >
 > | Placeholder here | Decomposes into (on archive) |
 > |---|---|
-> | `dependency-management` | `poetry-single-source-deps`, `poetry-in-project-venv`, `poetry-lock-committed`, `streamlit-dockerfile-poetry` |
+> | `dependency-management` | `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` |
 > | `test-infrastructure` | `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` |
 > | `initial-test-coverage` | `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` |
 
 ### Requirement: dependency-management
-Python dependencies for this project SHALL be declared in a single source of truth (`pyproject.toml`) and installed via Poetry into an in-project `.venv/`. A committed lockfile SHALL guarantee reproducible installs across machines, and every image that packages Python code SHALL build from the same source of truth.
+Python dependencies for this project SHALL be declared in a single source of truth (`pyproject.toml` using the PEP 621 `[project]` table) and installed via uv into an in-project `.venv/`. A committed `uv.lock` SHALL guarantee reproducible installs across machines, and every image that packages Python code SHALL build from the same source of truth.
 
 #### Scenario: single source of truth
 - **WHEN** a developer inspects the repo for Python dependency declarations
 - **THEN** `pyproject.toml` SHALL be the only manifest present, and no `requirements.txt` file SHALL exist in the repo (though it MAY be generated ephemerally at container build time)
 
 #### Scenario: reproducible install
-- **WHEN** two developers on different machines run `poetry install` against the same commit
-- **THEN** both SHALL end up with the same resolved dependency versions as determined by `poetry.lock`
+- **WHEN** two developers on different machines run `uv sync` against the same commit
+- **THEN** both SHALL end up with the same resolved dependency versions as determined by `uv.lock`
 
 ### Requirement: test-infrastructure
-The project SHALL declare a `tests/` directory tree, pytest configuration in `pyproject.toml`, and a `make test` target that runs `pytest` inside the Poetry venv. This scaffolding SHALL be in place independent of whether any test code exists yet.
+The project SHALL declare a `tests/` directory tree, pytest configuration in `pyproject.toml`, and a `make test` target that runs `pytest` inside the uv-managed venv. This scaffolding SHALL be in place independent of whether any test code exists yet.
 
 #### Scenario: make test with zero tests
 - **WHEN** `make test` is run in a repo state where `tests/` exists but contains no test files
