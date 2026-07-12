@@ -1,11 +1,9 @@
 ## Purpose
 
 End-to-end change data capture from PostgreSQL through Debezium and Kafka into PySpark Structured Streaming jobs that land deduplicated rows in ClickHouse. Covers connector configuration, Kafka topic conventions, and the Spark job model (base class, debug vs production sinks, decimal decoding).
-
 ## Requirements
-
 ### Requirement: debezium-connector-registration
-The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Connect REST API using the configuration in `data-platform/cdc/connectors/register-pg.json`. The connector name SHALL be `pg-connector-ecommerce`.
+The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Connect REST API using the configuration in `data-platform/cdc/connectors/register-pg.json`. The connector name SHALL be `pg-connector-ecommerce`. The connector configuration SHALL use `io.apicurio.registry.utils.converter.AvroConverter` for both key and value, with `apicurio.registry.url = http://schema-registry:8080/apis/registry/v2`. The Debezium container SHALL run with `ENABLE_APICURIO_CONVERTERS=true` so the bundled Apicurio converter is on the plugin path.
 
 #### Scenario: successful connector registration
 - **WHEN** the stack is running and `make apply-pg-connector` is executed
@@ -14,6 +12,11 @@ The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Conn
 #### Scenario: connector already exists
 - **WHEN** `make apply-pg-connector` is run while the connector already exists
 - **THEN** the Kafka Connect API SHALL return a 409 conflict; existing connector state SHALL be unchanged
+
+#### Scenario: Apicurio Avro converter configured
+- **WHEN** `data-platform/cdc/connectors/register-pg.json` is inspected
+- **THEN** `config.key.converter` and `config.value.converter` SHALL both be `io.apicurio.registry.utils.converter.AvroConverter`
+- **AND** `config.key.converter.apicurio.registry.url` and `config.value.converter.apicurio.registry.url` SHALL both be `http://schema-registry:8080/apis/registry/v2`
 
 ---
 
@@ -79,7 +82,7 @@ When launched with `--debug`, a Spark job SHALL write transformed rows to the co
 ---
 
 ### Requirement: production-mode
-When launched without `--debug`, a Spark job SHALL write transformed DataFrames to ClickHouse via `foreachBatch` using the JDBC ClickHouse driver. A checkpoint SHALL be maintained at `{CHECKPOINT_LOCATION}/{table_name}`.
+When launched without `--debug`, a Spark job SHALL write transformed DataFrames to ClickHouse via `foreachBatch` using the JDBC ClickHouse driver. A checkpoint SHALL be maintained at `{CHECKPOINT_LOCATION}/{table_name}/v1` (see `checkpoint-versioned-paths`). When `ENABLE_GX_GATE=1`, the `foreachBatch` function SHALL wrap the ClickHouse writer with a Great Expectations gate that routes invalid rows to `{table}_dlq` before delegating valid rows to the ClickHouse write (see `gx-batch-validation` and `dlq-on-validation-failure`).
 
 #### Scenario: data reaches ClickHouse
 - **WHEN** a Postgres row is inserted and all three prod-mode jobs are running
@@ -89,7 +92,9 @@ When launched without `--debug`, a Spark job SHALL write transformed DataFrames 
 - **WHEN** a prod-mode job is stopped cleanly and restarted
 - **THEN** the job SHALL resume from the last committed Kafka offset stored in the checkpoint
 
----
+#### Scenario: GX gate disabled by default
+- **WHEN** a Spark CDC job starts without `ENABLE_GX_GATE` set
+- **THEN** `create_batch_writer_function` SHALL return the unwrapped writer and no `_dlq` topic writes SHALL occur
 
 ### Requirement: decimal-decoding
 Any Spark transformer handling a PostgreSQL `DECIMAL` or `NUMERIC` column SHALL apply `decode_decimal_udf` (defined in `src/utils/udfs.py`) to convert Debezium's base64-encoded byte representation to a Spark `DecimalType`.
@@ -116,3 +121,4 @@ New per-table CDC jobs SHALL be implemented as subclasses of `BaseCDCJob` (`data
 - **WHEN** the `customers` job is examined (currently uses the legacy `CDCProcessor` monolith)
 - **THEN** it is acknowledged as the one pre-existing exception to this requirement, tracked for migration to `BaseCDCJob`
 - **AND** any *modification* to the customers job SHALL be accompanied by a change proposal migrating it to `BaseCDCJob`, not extending the legacy pattern
+

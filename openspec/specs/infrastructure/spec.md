@@ -47,17 +47,23 @@ The environment file SHALL live at `infrastructure/docker/.env`. It MUST be crea
 ---
 
 ### Requirement: per-service-targets
-Each service group SHALL have dedicated `up-*`, `down-*`, `logs-*`, and `sh-*` Makefile targets allowing developers to operate individual services without affecting others.
+Each service group SHALL have dedicated `up-*`, `down-*`, `logs-*`, and `sh-*` Makefile targets allowing developers to operate individual services without affecting others. The governance catalog stack (OpenMetadata + MySQL + Elasticsearch) SHALL be operated via `up-governance` / `down-governance` / `logs-governance` targets and SHALL NOT be included in `make up` because of its memory footprint.
 
 #### Scenario: start only db and kafka
 - **WHEN** `make up-db` and `make up-kafka` are run without `make up`
-- **THEN** only postgres, zookeeper, kafka1, and redpanda-console containers SHALL start
+- **THEN** only postgres, zookeeper, kafka1, redpanda-console, and schema-registry containers SHALL start (schema-registry is part of the kafka service group as of Phase 3)
 
 #### Scenario: shell access to postgres
 - **WHEN** `make sh-pg` is executed with the db service running
 - **THEN** a `psql` shell SHALL open connected to the `ecommerce` database as the configured user
 
----
+#### Scenario: governance stack starts independently
+- **WHEN** `make up-governance` is run against a repo where `make up` is already running
+- **THEN** OpenMetadata, its MySQL, and its Elasticsearch containers SHALL start alongside (attaching to the shared `ecommerce-network`), and the existing CDC containers SHALL be unaffected
+
+#### Scenario: governance stack absent from make up
+- **WHEN** `make up` is run
+- **THEN** neither `openmetadata-server`, `openmetadata-mysql`, nor `openmetadata-elasticsearch` SHALL appear in the resulting container list
 
 ### Requirement: connector-name
 The Debezium PostgreSQL connector SHALL always be named `pg-connector-ecommerce`. All connector management targets (`make check-connector`, `make restart-connector`, `make delete-connector`) SHALL reference this fixed name.

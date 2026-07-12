@@ -48,7 +48,7 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Run `make spec-validate` and ensure all checks pass
-- [ ] 5.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks
-- [ ] 5.3 Merge `specs/data-governance/spec.md` into a new `openspec/specs/data-governance/spec.md`, decomposing the five broad placeholder requirements into the 15 phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared"
-- [ ] 5.4 Move `openspec/changes/add-data-governance/` to `openspec/changes/archive/add-data-governance/`
+- [x] 5.1 Run `make spec-validate` and ensure all checks pass (`openspec validate --changes --specs` reports 6/6 passing; `make spec-validate` target does not exist in this repo)
+- [x] 5.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks (done by `openspec archive`: analytics ~2, cdc-pipeline ~2, infrastructure ~1)
+- [x] 5.3 Merge `specs/data-governance/spec.md` into a new `openspec/specs/data-governance/spec.md`, decomposing the five broad placeholder requirements into the 15 phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared" (done by `openspec archive`: 15 requirements added to a newly created `openspec/specs/data-governance/spec.md`; the five placeholders were pre-removed from the change dir before archive so only phase-scoped requirements land in main specs)
+- [x] 5.4 Move `openspec/changes/add-data-governance/` to `openspec/changes/archive/add-data-governance/` (actual archive path is date-prefixed: `openspec/changes/archive/2026-07-12-add-data-governance/`)
