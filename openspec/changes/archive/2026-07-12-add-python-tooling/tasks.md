@@ -47,7 +47,7 @@
 
 ## 4. Archive
 
-- [ ] 4.1 Run `openspec status --change add-python-tooling --json` and confirm `isComplete: true`
-- [ ] 4.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks
-- [ ] 4.3 Merge `specs/python-tooling/spec.md` into a new `openspec/specs/python-tooling/spec.md`, decomposing the three broad placeholder requirements into the 10 phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared"
-- [ ] 4.4 Move `openspec/changes/add-python-tooling/` to `openspec/changes/archive/add-python-tooling/`
+- [x] 4.1 Run `openspec status --change add-python-tooling --json` and confirm `isComplete: true` (using `openspec list --json`; command name has changed since design.md was written — 35/39 tasks reported before ticking Phase 4)
+- [x] 4.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks (done automatically by `openspec archive`: +3 requirements applied to `infrastructure`)
+- [x] 4.3 Merge `specs/python-tooling/spec.md` into a new `openspec/specs/python-tooling/spec.md`, decomposing the three broad placeholder requirements into the 10 phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared" (done automatically by `openspec archive`: +10 requirements created in `openspec/specs/python-tooling/spec.md`)
+- [x] 4.4 Move `openspec/changes/add-python-tooling/` to `openspec/changes/archive/add-python-tooling/` (actual archive path is date-prefixed: `openspec/changes/archive/2026-07-12-add-python-tooling/` — matches the pattern used for the earlier baseline change)
