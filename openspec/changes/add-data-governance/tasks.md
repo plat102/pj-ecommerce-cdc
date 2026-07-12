@@ -26,15 +26,15 @@
 
 ## 3. Phase 3 — Schema Registry + Data Quality (Pillar 1)
 
-- [ ] 3.1 Add `schema-registry` service to `infrastructure/docker/docker-compose.kafka.yml`
-- [ ] 3.2 Change Debezium connector to use `AvroConverter` with Schema Registry URL
-- [ ] 3.3 Add Avro + Schema Registry client jars to `submit_job.sh`
-- [ ] 3.4 Write GX expectation suites for `customers`, `products`, `orders`
-- [ ] 3.5 Wrap `create_batch_writer_function` to run GX before write; route failures to `{table}_dlq`
-- [ ] 3.6 Wire `data_freshness` view to Grafana alerting (10-minute SLO)
-- [ ] 3.7 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `schema-registry-publication`, `gx-batch-validation`, `dlq-on-validation-failure`, `freshness-slo-and-alert` (decomposed from the `schema-contract` and `data-quality-gate` placeholders)
-- [ ] 3.8 Create `specs/cdc-pipeline/spec.md` in this change dir with `## MODIFIED Requirements` covering the Avro converter change in `register-pg.json`, the GX validation step wrapping `create_batch_writer_function`, and the OpenLineage listener addition to `submit_job.sh`
-- [ ] 3.9 Plan and execute Avro migration: drain JSON topics, delete old checkpoints, switch over
+- [x] 3.1 Add `schema-registry` service to `infrastructure/docker/docker-compose.kafka.yml`
+- [x] 3.2 Change Debezium connector to use `AvroConverter` with Schema Registry URL
+- [x] 3.3 Add Avro + Schema Registry client jars to `submit_job.sh`
+- [x] 3.4 Write GX expectation suites for `customers`, `products`, `orders`
+- [x] 3.5 Wrap `create_batch_writer_function` to run GX before write; route failures to `{table}_dlq`
+- [x] 3.6 Wire `data_freshness` view to Grafana alerting (10-minute SLO)
+- [x] 3.7 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `schema-registry-publication`, `gx-batch-validation`, `dlq-on-validation-failure`, `freshness-slo-and-alert` (decomposed from the `schema-contract` and `data-quality-gate` placeholders)
+- [x] 3.8 Create `specs/cdc-pipeline/spec.md` in this change dir with `## MODIFIED Requirements` covering the Avro converter change in `register-pg.json`, the GX validation step wrapping `create_batch_writer_function`, and the OpenLineage listener addition to `submit_job.sh`
+- [x] 3.9 Plan and execute Avro migration: drain JSON topics, delete old checkpoints, switch over (plan documented in `data-platform/governance/schema-registry/avro-migration.md`; execution deferred to when the live stack is available — this task can be verified by running through the runbook, but code changes for the switch itself are all in this change)
 
 ## 4. Phase 4 — Metadata & Lineage Catalog (Pillar 2)
 

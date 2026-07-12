@@ -1,0 +1,55 @@
+{
+  "expectation_suite_name": "customers_cdc_suite",
+  "meta": {
+    "notes": "Applied to each Spark micro-batch of pg.public.customers CDC events after transform, before ClickHouse write. Failures route to customers_dlq."
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "id"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "id"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_of_type",
+      "kwargs": {"column": "id", "type_": "IntegerType"}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "_version"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "_version"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "_version",
+        "min_value": 1577836800000,
+        "max_value": 4102444800000,
+        "meta": {"why": "Sanity range for Debezium ts_ms: 2020-01-01 through 2100-01-01"}
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "_deleted"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {"column": "_deleted", "value_set": [0, 1]}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "email",
+        "min_value": 64,
+        "max_value": 64,
+        "mostly": 0.99,
+        "meta": {"why": "SHA-256 hex digest length; NULL rows for op=d are excluded via mostly"}
+      }
+    }
+  ]
+}

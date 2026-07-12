@@ -142,3 +142,57 @@ Every consumer of the CDC Kafka topics SHALL emit a single startup event to the 
 #### Scenario: Streamlit Kafka monitor emits startup event
 - **WHEN** a Streamlit session opens the Kafka monitor view for the first time
 - **THEN** exactly one event with `principal = "streamlit-kafka-monitor"` SHALL be published to `governance.access_log` for the session
+
+---
+
+## Phase 3 — Schema Registry + Data Quality (decomposed from `schema-contract` and `data-quality-gate`)
+
+The four requirements below are the phase-scoped decomposition for Phase 3 (Pillar 1). They coexist with the `schema-contract` and `data-quality-gate` placeholders until archive (task 5.3).
+
+### Requirement: schema-registry-publication
+The Debezium PostgreSQL source connector SHALL use `io.apicurio.registry.utils.converter.AvroConverter` with an `apicurio.registry.url` value pointing at the Apicurio Registry service (`http://schema-registry:8080/apis/registry/v2`). Each of the three CDC topics (`pg.public.customers`, `pg.public.products`, `pg.public.orders`) SHALL have a registered key artifact and value artifact in Apicurio Registry after the first CDC event flows through.
+
+#### Scenario: connector uses Apicurio Avro converter
+- **WHEN** `data-platform/cdc/connectors/register-pg.json` is inspected
+- **THEN** both `key.converter` and `value.converter` SHALL be `io.apicurio.registry.utils.converter.AvroConverter`
+- **AND** both `key.converter.apicurio.registry.url` and `value.converter.apicurio.registry.url` SHALL be `http://schema-registry:8080/apis/registry/v2`
+- **AND** both `.apicurio.registry.auto-register` SHALL be `"true"` (Debezium creates the artifact on first publish)
+
+#### Scenario: artifacts registered after first message
+- **WHEN** a CDC event is produced to `pg.public.customers` after applying the Avro connector config
+- **THEN** the Apicurio Registry SHALL contain artifacts with IDs `pg.public.customers-key` and `pg.public.customers-value` in the default group with at least one registered version each
+
+### Requirement: gx-batch-validation
+Each Spark CDC job SHALL run a Great Expectations suite (loaded from `data-platform/governance/expectations/{table}_suite.json`) against every micro-batch DataFrame **before** the ClickHouse write. Suites SHALL be gated by the `ENABLE_GX_GATE=1` environment variable so dev environments without the `great_expectations` package continue to function unchanged.
+
+#### Scenario: valid rows written to ClickHouse
+- **WHEN** a batch of CDC events passes every column-level expectation in the table's suite
+- **THEN** all rows in the batch SHALL be written to the ClickHouse `{table}_cdc` table via the existing JDBC writer
+
+#### Scenario: expectation suite path
+- **WHEN** the customers CDC job starts under `ENABLE_GX_GATE=1`
+- **THEN** the suite SHALL be resolved from `${GX_SUITE_DIR:-/home/jupyter/governance/expectations}/customers_suite.json` and SHALL contain at least the `expect_column_values_to_not_be_null` expectation on `id` and `_version`
+
+### Requirement: dlq-on-validation-failure
+Rows that fail any column-level expectation SHALL be routed to a `{table}_dlq` Kafka topic before the `foreachBatch` delegates to the ClickHouse writer. The DLQ payload SHALL be the JSON serialization of the failing row plus a `_failed_expectation` field naming the first failing expectation type. Failing rows SHALL NOT reach the ClickHouse `{table}_cdc` table.
+
+#### Scenario: invalid row lands in DLQ
+- **WHEN** a customers CDC event arrives with `id = null` and `ENABLE_GX_GATE=1`
+- **THEN** the row SHALL be written to `customers_dlq` with `_failed_expectation = "expect_column_values_to_not_be_null"`
+- **AND** the same row SHALL NOT appear in `customers_cdc`
+
+#### Scenario: valid rows in the same batch still land
+- **WHEN** a batch of 10 orders contains one row failing `expect_column_values_to_be_in_set` on `_deleted` and nine passing rows
+- **THEN** the nine passing rows SHALL be written to `orders_cdc` and the one failing row SHALL be written to `orders_dlq`
+
+### Requirement: freshness-slo-and-alert
+The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that fires when any target table has `minutes_since_last_update > 10`. The alert rule SHALL be provisioned via `infrastructure/docker/grafana/provisioning/alerting/data_freshness.yml` (not hand-configured in the Grafana UI).
+
+#### Scenario: alert rule provisioned
+- **WHEN** Grafana boots with the alerting provisioning file present
+- **THEN** the rule `cdc_freshness_10min_slo` SHALL exist in the `data-governance` folder with `for: 2m`
+- **AND** the rule's SQL SHALL query `SELECT max(minutes_since_last_update) AS value FROM data_freshness`
+
+#### Scenario: stalled pipeline triggers alert
+- **WHEN** Spark CDC jobs are stopped and no new events reach ClickHouse for > 10 minutes
+- **THEN** the `cdc_freshness_10min_slo` rule SHALL enter the `Alerting` state after its 2-minute confirmation window

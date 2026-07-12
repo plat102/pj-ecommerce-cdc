@@ -66,15 +66,18 @@ class ClickHouseWriter:
     
     def create_batch_writer_function(self, table_name: str):
         """
-        Create a batch writer function for streaming
-        
-        Args:
-            table_name: Target table name
-            
-        Returns:
-            Function: Batch writer function for foreachBatch
+        Create a batch writer function for streaming.
+
+        When ENABLE_GX_GATE=1, wraps the writer with a Great Expectations
+        gate: invalid rows route to `{table_name}_dlq` before the
+        ClickHouse write. Default off so dev environments without GX
+        continue to work unchanged.
         """
         def write_batch_function(batch_df: DataFrame, batch_id: int):
             self.write_stream_batch(batch_df, batch_id, table_name)
-            
+
+        import os
+        if os.getenv("ENABLE_GX_GATE") == "1":
+            from src.governance.quality import with_gx_gate
+            return with_gx_gate(write_batch_function, table_name)
         return write_batch_function

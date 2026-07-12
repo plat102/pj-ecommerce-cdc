@@ -35,29 +35,31 @@ services:
       - "8080:8080"
     depends_on:
       - kafka1
-      # - schema-registry
+      - schema-registry
     environment:
-      # KAFKA_BROKERS: kafka1:9092
-      # CONSOLE_LISTEN_PORT: 8080
       CONFIG_FILEPATH: /tmp/config/config.yaml
     volumes:
       - ./kafka/console-config.yaml:/tmp/config/config.yaml
-    # command: console -config.filepath=/tmp/config/
     networks:
       - ecommerce-network
 
-  # schema-registry:
-  #   image: confluentinc/cp-schema-registry:${KAFKA_IMAGE_TAG:-7.8.2}
-  #   container_name: schema-registry
-  #   depends_on:
-  #     - kafka1
-  #   ports:
-  #     - "8081:8081"
-  #   environment:
-  #     SCHEMA_REGISTRY_HOST_NAME: schema-registry
-  #     SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:9092
-  #   networks:
-  #     - ecommerce-network
+  # Apicurio Registry: open-source (Apache 2.0) schema registry.
+  # Debezium image bundles the matching Apicurio Avro converter out of the box
+  # via ENABLE_APICURIO_CONVERTERS=true (see docker-compose.debezium.yml).
+  # Apicurio exposes a Confluent-compatible REST API at /apis/ccompat/v7 if a
+  # tool insists on the Confluent shape.
+  schema-registry:
+    image: apicurio/apicurio-registry-mem:${APICURIO_IMAGE_TAG:-2.5.11.Final}
+    container_name: schema-registry
+    depends_on:
+      - kafka1
+    ports:
+      - "8081:8080"
+    environment:
+      QUARKUS_HTTP_PORT: 8080
+      QUARKUS_PROFILE: prod
+    networks:
+      - ecommerce-network
 
 networks:
   ecommerce-network:

@@ -1,0 +1,50 @@
+{
+  "expectation_suite_name": "products_cdc_suite",
+  "meta": {
+    "notes": "Applied to each Spark micro-batch of pg.public.products CDC events after transform, before ClickHouse write. Failures route to products_dlq."
+  },
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "id"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "id"}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "price"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "price",
+        "min_value": 0,
+        "max_value": 1000000,
+        "mostly": 0.99,
+        "meta": {"why": "Non-negative price up to $1M; NULL on op=d excluded via mostly"}
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {"column": "_version"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {"column": "_version"}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "_version",
+        "min_value": 1577836800000,
+        "max_value": 4102444800000
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {"column": "_deleted", "value_set": [0, 1]}
+    }
+  ]
+}

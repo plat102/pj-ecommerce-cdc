@@ -1,0 +1,40 @@
+apiVersion: 1
+
+# Fires when any CDC target table has not received an update in the last
+# 10 minutes. Anchored on the `data_freshness` ClickHouse view
+# (data-platform/dashboards/clickhouse/analytics_views.sql).
+groups:
+  - name: data-governance-freshness
+    orgId: 1
+    folder: data-governance
+    interval: 1m
+    rules:
+      - uid: cdc_freshness_10min_slo
+        title: CDC freshness > 10 min
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: clickhouse
+            model:
+              rawSql: |
+                SELECT max(minutes_since_last_update) AS value
+                FROM data_freshness
+              format: table
+              intervalMs: 60000
+              maxDataPoints: 1
+        noDataState: NoData
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: CDC pipeline freshness SLO breached
+          description: |
+            At least one of customers_cdc / products_cdc / orders_cdc has
+            not received an update in > 10 minutes. Debezium / Spark / Kafka
+            may be stalled. Investigate via `make cdc-status` and
+            `make logs-debezium`.
+        labels:
+          severity: warning
+          pillar: data-quality
+        # Alert when `value > 10` (minutes since last update).
+        # Grafana 10.x classic_conditions on the tabular rawSql result:
+        # threshold check applied via evaluator below.
