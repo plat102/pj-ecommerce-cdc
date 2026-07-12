@@ -10,6 +10,7 @@ COMPOSE_DBZ := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.debezium.yml
 COMPOSE_UI := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.ui.yml
 COMPOSE_SPARK := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.spark.yml
 COMPOSE_ANALYTICS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.analytics.yml
+COMPOSE_GOVERNANCE := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.governance.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
@@ -264,6 +265,22 @@ restart-analytics: ## Restart ClickHouse + Grafana services
 
 clickhouse-client: ## Connect to ClickHouse client
 	$(COMPOSE_ANALYTICS) exec clickhouse clickhouse-client
+
+#=====================================================
+# --- Governance Catalog (OpenMetadata) --------------
+#=====================================================
+
+up-governance: ## Start OpenMetadata + MySQL + Elasticsearch (heavy ~4GB RAM)
+	$(COMPOSE_GOVERNANCE) up -d
+
+down-governance: ## Stop OpenMetadata stack
+	$(COMPOSE_GOVERNANCE) down --remove-orphans
+
+logs-governance: ## Show OpenMetadata logs
+	$(COMPOSE_GOVERNANCE) logs -f
+
+status-governance: ## Show OpenMetadata stack status
+	$(COMPOSE_GOVERNANCE) ps
 
 grafana-url: ## Show Grafana access info
 	@echo "🔗 Grafana URL: http://localhost:3000"

@@ -1,0 +1,41 @@
+# OpenMetadata ingestion config for the source PostgreSQL database.
+# Run from an environment with `openmetadata-ingestion` installed:
+#   pip install "openmetadata-ingestion[postgres]==1.5.9"
+#   metadata ingest -c data-platform/governance/openmetadata/ingestion/postgres.yaml
+#
+# The `hostPort` uses in-network hostnames (postgres:5432); when running the
+# ingestion outside Docker, swap to localhost:5432.
+
+source:
+  type: postgres
+  serviceName: ecommerce-postgres
+  serviceConnection:
+    config:
+      type: Postgres
+      hostPort: postgres:5432
+      username: postgres
+      authType:
+        password: postgres
+      database: ecommerce
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      schemaFilterPattern:
+        includes:
+          - public
+      tableFilterPattern:
+        includes:
+          - customers
+          - products
+          - orders
+
+sink:
+  type: metadata-rest
+  config: {}
+
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: http://openmetadata-server:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_INGESTION_JWT}

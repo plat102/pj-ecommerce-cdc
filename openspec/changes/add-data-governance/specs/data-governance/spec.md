@@ -196,3 +196,47 @@ The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that
 #### Scenario: stalled pipeline triggers alert
 - **WHEN** Spark CDC jobs are stopped and no new events reach ClickHouse for > 10 minutes
 - **THEN** the `cdc_freshness_10min_slo` rule SHALL enter the `Alerting` state after its 2-minute confirmation window
+
+---
+
+## Phase 4 — Metadata & Lineage Catalog (decomposed from `lineage-emission`)
+
+The three requirements below are the phase-scoped decomposition for Phase 4 (Pillar 2). They coexist with the `lineage-emission` placeholder until archive (task 5.3).
+
+### Requirement: openmetadata-ingestion
+The project SHALL ship OpenMetadata ingestion configuration files for each system in the CDC pipeline it owns as a data producer or consumer: PostgreSQL source, Kafka + Schema Registry, and ClickHouse sink. Each config SHALL live under `data-platform/governance/openmetadata/ingestion/{postgres,kafka,clickhouse}.yaml` and be runnable via `metadata ingest -c <path>`.
+
+#### Scenario: three ingestion configs exist
+- **WHEN** `data-platform/governance/openmetadata/ingestion/` is inspected
+- **THEN** it SHALL contain `postgres.yaml`, `kafka.yaml`, and `clickhouse.yaml`, each declaring a `source`, `sink` (`metadata-rest`), and `workflowConfig` block
+
+#### Scenario: kafka config uses Apicurio ccompat endpoint
+- **WHEN** `kafka.yaml` is inspected
+- **THEN** `source.serviceConnection.config.schemaRegistryURL` SHALL be `http://schema-registry:8080/apis/ccompat/v7` (Apicurio's Confluent-compatible endpoint, which OpenMetadata's kafka ingestion targets natively)
+
+### Requirement: openlineage-spark-emission
+When `ENABLE_OPENLINEAGE=1` is set at Spark job submission time, `data-platform/streaming/spark/scripts/submit_job.sh` SHALL wire the OpenLineage Spark listener into `spark-submit` and emit lineage events to OpenMetadata's OpenLineage endpoint. The listener SHALL be off by default so dev environments without a lineage collector are unaffected.
+
+#### Scenario: listener wired when enabled
+- **WHEN** `submit_job.sh` runs with `ENABLE_OPENLINEAGE=1`
+- **THEN** the resulting `spark-submit` command SHALL include `--conf spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener`
+- **AND** the `--packages` list SHALL include `io.openlineage:openlineage-spark_2.12:1.24.2`
+
+#### Scenario: listener absent by default
+- **WHEN** `submit_job.sh` runs without `ENABLE_OPENLINEAGE`
+- **THEN** the `spark-submit` command SHALL NOT reference OpenLineage in any `--conf` flag
+
+### Requirement: column-documentation-coverage
+Every column in the three ClickHouse CDC tables (`customers_cdc`, `products_cdc`, `orders_cdc`) SHALL carry a `COMMENT` clause explaining what the value represents and, for PII columns, the transformation that produced it. Each table SHALL also carry a table-level `COMMENT` naming its owner and its source.
+
+#### Scenario: every column has a COMMENT
+- **WHEN** `SHOW CREATE TABLE ecommerce_analytics.customers_cdc` (and products_cdc, orders_cdc) is inspected
+- **THEN** every column SHALL have a non-empty `COMMENT '...'` clause
+
+#### Scenario: PII columns explain their transformation
+- **WHEN** the COMMENT for `customers_cdc.email` or `customers_cdc.name` is read
+- **THEN** it SHALL reference the applicable governance requirement (`pii-hashing-customers-email` or `pii-tokenization-customers-name`)
+
+#### Scenario: tables carry owner + source
+- **WHEN** the table-level COMMENT for any CDC table is read
+- **THEN** it SHALL name the owner (`data-platform`) and the source (the corresponding `postgres.public.*` table)

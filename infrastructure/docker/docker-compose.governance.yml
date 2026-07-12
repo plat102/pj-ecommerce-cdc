@@ -1,0 +1,84 @@
+# Metadata catalog + lineage collector for Phase 4 of add-data-governance.
+# Split from the main stack because OpenMetadata + MySQL + Elasticsearch
+# together consume ~4GB of memory — dev machines can run the CDC pipeline
+# without this layer, and OM's ingestion cadence is on-demand rather than
+# always-on.
+#
+# Bring up with `make up-governance`; connect from OM ingestion into
+# postgres / kafka1 / clickhouse via the shared ecommerce-network.
+
+services:
+  openmetadata-mysql:
+    image: mysql:${OPENMETADATA_MYSQL_TAG:-8.0.29}
+    container_name: openmetadata-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: openmetadata_user
+      MYSQL_PASSWORD: openmetadata_password
+      MYSQL_DATABASE: openmetadata_db
+    volumes:
+      - openmetadata_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ecommerce-network
+
+  openmetadata-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${OPENMETADATA_ES_TAG:-8.11.4}
+    container_name: openmetadata-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - openmetadata_es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - ecommerce-network
+
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:${OPENMETADATA_VERSION:-1.5.9}
+    container_name: openmetadata-server
+    depends_on:
+      openmetadata-mysql:
+        condition: service_healthy
+      openmetadata-elasticsearch:
+        condition: service_healthy
+    ports:
+      - "8585:8585"  # UI + REST
+      - "8586:8586"  # health/admin
+    environment:
+      DB_DRIVER_CLASS: com.mysql.cj.jdbc.Driver
+      DB_SCHEME: mysql
+      DB_USE_SSL: "false"
+      DB_HOST: openmetadata-mysql
+      DB_PORT: 3306
+      DB_USER: openmetadata_user
+      DB_USER_PASSWORD: openmetadata_password
+      OM_DATABASE: openmetadata_db
+      ELASTICSEARCH_HOST: openmetadata-elasticsearch
+      ELASTICSEARCH_PORT: 9200
+      ELASTICSEARCH_SCHEME: http
+      SERVER_PORT: 8585
+      SERVER_ADMIN_PORT: 8586
+      MIGRATION_LIMIT_PARAM: 1200
+      # First boot bootstraps the schema; safe on subsequent boots.
+      BOOTSTRAP_OM: "true"
+    networks:
+      - ecommerce-network
+
+volumes:
+  openmetadata_mysql_data:
+  openmetadata_es_data:
+
+networks:
+  ecommerce-network:
+    external: true
+    name: ecommerce-cdc_ecommerce-network

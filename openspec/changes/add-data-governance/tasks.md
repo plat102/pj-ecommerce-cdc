@@ -38,13 +38,13 @@
 
 ## 4. Phase 4 — Metadata & Lineage Catalog (Pillar 2)
 
-- [ ] 4.1 Add `docker-compose.governance.yml` with OpenMetadata + MySQL + Elasticsearch
-- [ ] 4.2 Add `up-governance` / `down-governance` / `logs-governance` Make targets
-- [ ] 4.3 Write OpenMetadata ingestion configs for Postgres, Kafka, ClickHouse
-- [ ] 4.4 Enable OpenLineage Spark listener in `submit_job.sh`
-- [ ] 4.5 Populate column descriptions + owner tags on the three CDC tables
-- [ ] 4.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `openmetadata-ingestion`, `openlineage-spark-emission`, `column-documentation-coverage` (decomposed from the `lineage-emission` placeholder)
-- [ ] 4.7 Create `specs/infrastructure/spec.md` in this change dir with `## MODIFIED Requirements` covering the new `docker-compose.governance.yml`, the `up-governance` / `down-governance` / `logs-governance` Make targets, and the Schema Registry addition to `docker-compose.kafka.yml`
+- [x] 4.1 Add `docker-compose.governance.yml` with OpenMetadata + MySQL + Elasticsearch
+- [x] 4.2 Add `up-governance` / `down-governance` / `logs-governance` Make targets
+- [x] 4.3 Write OpenMetadata ingestion configs for Postgres, Kafka, ClickHouse
+- [x] 4.4 Enable OpenLineage Spark listener in `submit_job.sh`
+- [x] 4.5 Populate column descriptions + owner tags on the three CDC tables
+- [x] 4.6 Update `specs/data-governance/spec.md` in this change dir — add `## ADDED Requirements` for `openmetadata-ingestion`, `openlineage-spark-emission`, `column-documentation-coverage` (decomposed from the `lineage-emission` placeholder)
+- [x] 4.7 Create `specs/infrastructure/spec.md` in this change dir with `## MODIFIED Requirements` covering the new `docker-compose.governance.yml`, the `up-governance` / `down-governance` / `logs-governance` Make targets, and the Schema Registry addition to `docker-compose.kafka.yml`
 
 ## 5. Archive
 

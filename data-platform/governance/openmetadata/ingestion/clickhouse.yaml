@@ -1,0 +1,37 @@
+# OpenMetadata ingestion config for the ClickHouse sink.
+#
+#   pip install "openmetadata-ingestion[clickhouse]==1.5.9"
+#   metadata ingest -c data-platform/governance/openmetadata/ingestion/clickhouse.yaml
+
+source:
+  type: clickhouse
+  serviceName: ecommerce-clickhouse
+  serviceConnection:
+    config:
+      type: Clickhouse
+      hostPort: clickhouse:8123
+      username: default
+      authType:
+        password: ${CLICKHOUSE_PASSWORD}
+      databaseSchema: ecommerce_analytics
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      tableFilterPattern:
+        includes:
+          - customers_cdc
+          - products_cdc
+          - orders_cdc
+          - data_freshness
+          - .*_dlq
+
+sink:
+  type: metadata-rest
+  config: {}
+
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: http://openmetadata-server:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_INGESTION_JWT}

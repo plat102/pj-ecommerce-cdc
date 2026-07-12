@@ -1,0 +1,34 @@
+# OpenMetadata ingestion config for Kafka + Apicurio Registry.
+# Apicurio exposes a Confluent-compatible endpoint at /apis/ccompat/v7 which
+# OpenMetadata's Confluent-schema-registry ingestion targets natively.
+#
+#   pip install "openmetadata-ingestion[kafka]==1.5.9"
+#   metadata ingest -c data-platform/governance/openmetadata/ingestion/kafka.yaml
+
+source:
+  type: kafka
+  serviceName: ecommerce-kafka
+  serviceConnection:
+    config:
+      type: Kafka
+      bootstrapServers: kafka1:9092
+      schemaRegistryURL: http://schema-registry:8080/apis/ccompat/v7
+  sourceConfig:
+    config:
+      type: MessagingMetadata
+      topicFilterPattern:
+        includes:
+          - pg\.public\..*
+          - governance\..*
+          - .*_dlq
+
+sink:
+  type: metadata-rest
+  config: {}
+
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: http://openmetadata-server:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_INGESTION_JWT}
