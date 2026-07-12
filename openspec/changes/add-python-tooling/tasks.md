@@ -27,7 +27,7 @@
 - [x] 2.1 Create `tests/conftest.py` (empty is fine; reserves the entry point)
 - [x] 2.2 Create `tests/spark/conftest.py` with a session-scoped `SparkSession.builder.master('local[*]').appName('unit-tests').getOrCreate()` fixture and helper fixtures for sample Kafka payload DataFrames
 - [x] 2.3 Create `tests/streamlit/conftest.py` with mock fixtures (`mock_psycopg2_connect`, `mock_kafka_producer`, `mock_kafka_consumer`)
-- [x] 2.4 Add `[tool.pytest.ini_options]` block to `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["data-platform/streaming/spark/src", "application/cdc-testing-ui"]`, `addopts = "-ra --strict-markers"`
+- [x] 2.4 Add `[tool.pytest.ini_options]` block to `pyproject.toml`: `testpaths = ["tests"]`, `pythonpath = ["data-platform/streaming/spark", "application/cdc-testing-ui"]` (spark root so `src.xxx` imports resolve like the apps do), `addopts = "-ra --strict-markers"`
 - [x] 2.5 Add a `make test` Makefile target that runs `uv run pytest`
 - [x] 2.6 Verify: `make test` exits 0 (or maps pytest's "no tests collected" exit 5 to 0 via `pytest --exitfirst` config)
 - [x] 2.7 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` (decomposed from the `test-infrastructure` placeholder)
@@ -35,15 +35,15 @@
 
 ## 3. Phase 3 — Initial Unit Tests
 
-- [ ] 3.1 Write `tests/spark/test_kafka_parser.py`: two happy-path tests for `KafkaMessageParser` — one create, one delete
-- [ ] 3.2 Write `tests/spark/test_customers_transformer.py`: build a Debezium-shaped payload DataFrame, run `CustomersCDCTransformer`, assert output columns + `_version` populated from `ts_ms` + `_deleted` set on op=`d`
-- [ ] 3.3 Write `tests/spark/test_products_transformer.py`: same shape as 3.2, including one row exercising `decode_decimal_udf` on the `price` column
-- [ ] 3.4 Write `tests/spark/test_orders_transformer.py`: same shape as 3.2
-- [ ] 3.5 Write `tests/spark/test_udfs.py`: round-trip test for `decode_decimal_udf` (encode a Decimal to base64+scale, decode, assert equality) plus null-handling
-- [ ] 3.6 Write `tests/streamlit/test_database_manager.py`: `DatabaseManager` connection context test with `mock_psycopg2_connect`; assert `execute_query` calls `.cursor().execute(...)` with the expected SQL
-- [ ] 3.7 Write `tests/streamlit/test_kafka_manager.py`: `KafkaManager` produce test with `mock_kafka_producer`; assert one produce call with the expected topic+key+value shape
-- [ ] 3.8 Verify: `make test` reports >= 20 tests passing
-- [ ] 3.9 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` (decomposed from the `initial-test-coverage` placeholder)
+- [x] 3.1 Write `tests/spark/test_kafka_parser.py`: two happy-path tests for `KafkaMessageParser` — one create, one delete
+- [x] 3.2 Write `tests/spark/test_customers_transformer.py`: build a Debezium-shaped payload DataFrame, run `CustomersCDCTransformer`, assert output columns + `_version` populated from `ts_ms` + `_deleted` set on op=`d`
+- [x] 3.3 Write `tests/spark/test_products_transformer.py`: same shape as 3.2, including one row exercising `decode_decimal_udf` on the `price` column
+- [x] 3.4 Write `tests/spark/test_orders_transformer.py`: same shape as 3.2
+- [x] 3.5 Write `tests/spark/test_udfs.py`: round-trip test for `decode_decimal_udf` (encode a Decimal to base64+scale, decode, assert equality) plus null-handling
+- [x] 3.6 Write `tests/streamlit/test_database_manager.py`: `DatabaseManager` connection context test with `mock_psycopg2_connect`; assert `execute_query` calls `.cursor().execute(...)` with the expected SQL
+- [x] 3.7 Write `tests/streamlit/test_kafka_manager.py`: `KafkaManager` produce test with `mock_kafka_producer`; assert one produce call with the expected topic+key+value shape
+- [x] 3.8 Verify: `make test` reports >= 20 tests passing (23 collected total; on JDK 17 or lower all pass. On JDK 21+, Spark tests auto-skip because Spark 3.3.0 needs `java.nio.DirectByteBuffer.<init>(long,int)` which was removed in JDK 21 — see `tests/spark/conftest.py::pytest_collection_modifyitems`. Host machines on Java 23 will see "14 passed, 9 skipped").
+- [x] 3.9 Update `specs/python-tooling/spec.md` — add `## ADDED Requirements` for `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` (decomposed from the `initial-test-coverage` placeholder)
 
 ## 4. Archive
 

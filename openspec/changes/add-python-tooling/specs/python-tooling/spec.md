@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Phase 1 (Pillar 1 — Dependency Management) and Phase 2 (Pillar 3 — Test Infrastructure skeleton) requirements are decomposed below. Phase 3 (`initial-test-coverage`) remains a broad placeholder and will be decomposed as that phase reaches implementation.
+> **Status:** All three placeholders are now decomposed into phase-scoped requirements.
 >
 > **Decomposition status:**
 >
@@ -8,7 +8,7 @@
 > |---|---|---|
 > | `dependency-management` | Yes (Phase 1) | `uv-single-source-deps`, `uv-in-project-venv`, `uv-lock-committed`, `streamlit-dockerfile-uv` |
 > | `test-infrastructure` | Yes (Phase 2) | `pytest-config-in-pyproject`, `tests-directory-layout`, `make-test-target` |
-> | `initial-test-coverage` | Not yet | `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` |
+> | `initial-test-coverage` | Yes (Phase 3) | `spark-transformer-tests`, `spark-udf-tests`, `streamlit-manager-tests` |
 
 ### Requirement: uv-single-source-deps
 `pyproject.toml` using the PEP 621 `[project]` table SHALL be the single source of Python dependency truth for this project. No `requirements.txt` file SHALL exist in the repo (though it MAY be generated ephemerally at container build time by `uv export`). The `[tool.poetry]` block SHALL NOT be present.
@@ -57,7 +57,7 @@ The Streamlit application container defined by `infrastructure/docker/streamlit/
 - **THEN** the `uv` binary SHALL NOT be present in the final image layer
 
 ### Requirement: pytest-config-in-pyproject
-Pytest configuration for this project SHALL live under `[tool.pytest.ini_options]` in `pyproject.toml`. The block SHALL declare `testpaths = ["tests"]` and `pythonpath` entries covering both codebases (`data-platform/streaming/spark/src` and `application/cdc-testing-ui`), and it SHALL set `addopts` including `--strict-markers` to catch typos in `@pytest.mark.*` decorators.
+Pytest configuration for this project SHALL live under `[tool.pytest.ini_options]` in `pyproject.toml`. The block SHALL declare `testpaths = ["tests"]` and `pythonpath` entries covering both codebases (`data-platform/streaming/spark` and `application/cdc-testing-ui`), and it SHALL set `addopts` including `--strict-markers` to catch typos in `@pytest.mark.*` decorators.
 
 #### Scenario: pytest discovers both codebases
 - **WHEN** a test file under `tests/spark/` imports from `transformations`
@@ -90,13 +90,35 @@ The Makefile SHALL provide a `test` target that runs `uv run pytest`. The target
 - **WHEN** `make test` is run
 - **THEN** the underlying command SHALL be `uv run pytest` (no direct `pytest` invocation, no manual venv activation)
 
-### Requirement: initial-test-coverage
-Once test infrastructure exists, the pure-function surfaces of the two Python codebases (Spark transformations/UDFs; Streamlit managers) SHALL carry unit tests sufficient to catch a broken transformer or a broken manager call before end-to-end runs.
+### Requirement: spark-transformer-tests
+Each per-table CDC transformer (`CustomersCDCTransformer`, `ProductCDCTransformer`, `OrderCDCTransformer`) SHALL have at least one happy-path unit test that constructs a Debezium-shaped input DataFrame and asserts the output columns, the `_version` value sourced from `ts_ms`, and the `_deleted` flag set correctly for `op=d`. `KafkaMessageParser` SHALL also carry create-and-delete parse tests.
 
 #### Scenario: transformer regression caught by tests
 - **WHEN** a per-table CDC transformer's `_version` extraction is changed to reference a wrong field
 - **THEN** the corresponding transformer test SHALL fail during `make test` without a live pipeline
 
-#### Scenario: UDF regression caught by tests
-- **WHEN** `decode_decimal_udf` is modified in a way that misinterprets Debezium's base64 encoding
-- **THEN** its round-trip test SHALL fail during `make test`
+#### Scenario: delete op sets deleted flag
+- **WHEN** a `CustomersCDCTransformer` (or products / orders) is fed a row with `op=d`
+- **THEN** the transformer test SHALL assert `_deleted == 1` and that ID is sourced from `before` (not `after`, which is null)
+
+### Requirement: spark-udf-tests
+Pure-function UDF bodies in `src/utils/udfs.py` SHALL have unit tests covering: `decode_decimal` round-trip (encode a Decimal → decode → assert equality) plus its null-handling; `hash_pii` determinism, differentiation across inputs, and null-handling; `tokenize_name` initial-preservation and null/empty-handling.
+
+#### Scenario: decimal round-trip
+- **WHEN** a Decimal is encoded into Debezium's two's-complement bytes and decoded via `decode_decimal(scale=2)`
+- **THEN** the recovered value SHALL equal the original Decimal
+
+#### Scenario: hash_pii is deterministic
+- **WHEN** `hash_pii` is called twice with the same input under the same `PII_SALT`
+- **THEN** both calls SHALL return the same SHA-256 hex digest
+
+### Requirement: streamlit-manager-tests
+`DatabaseManager` and `KafkaManager` in `application/cdc-testing-ui/managers/` SHALL each carry at least one happy-path test using mocked client libraries (patched at the `managers.database.psycopg2.connect` and `managers.kafka.KafkaConsumer` boundaries).
+
+#### Scenario: execute_query forwards SQL to cursor
+- **WHEN** `DatabaseManager.execute_query(sql, params)` is called against a mocked psycopg2 connection
+- **THEN** the mocked cursor's `.execute` SHALL be called once with the same `(sql, params)` tuple
+
+#### Scenario: create_consumer wires bootstrap_servers
+- **WHEN** `KafkaManager.create_consumer(topics=["pg.public.customers"])` is called with a mocked `KafkaConsumer`
+- **THEN** the mock constructor SHALL be invoked with `("pg.public.customers",)` and `bootstrap_servers` equal to the manager's config

@@ -9,15 +9,21 @@ import pytest
 
 @pytest.fixture
 def mock_psycopg2_connect(mocker):
-    """Patch `psycopg2.connect` and return the mock connection object.
+    """Patch `psycopg2.connect` at the managers.database import boundary and
+    return the mock connection.
 
-    Cursor is a MagicMock; tests assert on `.cursor().execute(...)` calls.
+    execute_query uses `with self.connection.cursor() as cursor`, so the
+    context-manager path (`__enter__`/`__exit__`) must return the same cursor
+    that direct `.cursor()` calls return — tests inspect `.execute(...)` on
+    that cursor regardless of which code path DatabaseManager uses.
     """
     mock_conn = mocker.MagicMock(name="psycopg2_connection")
+    mock_conn.closed = False
     mock_cursor = mocker.MagicMock(name="psycopg2_cursor")
-    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     mock_conn.cursor.return_value = mock_cursor
-    mocker.patch("psycopg2.connect", return_value=mock_conn)
+    mock_cursor.__enter__.return_value = mock_cursor
+    mock_cursor.__exit__.return_value = False
+    mocker.patch("managers.database.psycopg2.connect", return_value=mock_conn)
     return mock_conn
 
 

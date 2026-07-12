@@ -37,7 +37,7 @@ packages = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [
-    "data-platform/streaming/spark/src",
+    "data-platform/streaming/spark",
     "application/cdc-testing-ui",
 ]
 addopts = "-ra --strict-markers"
