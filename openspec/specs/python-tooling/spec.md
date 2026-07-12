@@ -38,7 +38,7 @@ The canonical Python virtual environment SHALL be `.venv/` at the repo root, man
 - **THEN** `uv.lock` SHALL exist at the repo root and SHALL NOT be listed in `.gitignore`
 
 ### Requirement: streamlit-dockerfile-uv
-The Streamlit application container defined by `infrastructure/docker/streamlit/Dockerfile` SHALL install Python dependencies from `pyproject.toml` and `uv.lock` via a multi-stage build: stage 1 uses a pinned `ghcr.io/astral-sh/uv` image to run `uv export --frozen --no-hashes --no-dev -o requirements.txt`, and stage 2 runs `pip install -r requirements.txt` on the exported file. The runtime image SHALL NOT contain the `uv` binary and SHALL NOT reference a repo-tracked `requirements.txt`.
+The Streamlit application container defined by `infrastructure/docker/streamlit/Dockerfile` SHALL install Python dependencies from `pyproject.toml` and `uv.lock` via a multi-stage build: stage 1 uses a pinned `ghcr.io/astral-sh/uv:*-alpine` image (alpine variant is required because the default distroless variant has no `/bin/sh`) to run `uv export --frozen --no-hashes --no-dev --no-emit-project -o requirements.txt` (`--no-emit-project` is required because `pyproject.toml` declares packages under `[tool.hatch.build.targets.wheel]`, which otherwise emits a self-referential editable install line), and stage 2 runs `pip install -r requirements.txt` on the exported file. The runtime image SHALL NOT contain the `uv` binary and SHALL NOT reference a repo-tracked `requirements.txt`.
 
 #### Scenario: streamlit build reads pyproject via uv export
 - **WHEN** the Streamlit Docker image is rebuilt

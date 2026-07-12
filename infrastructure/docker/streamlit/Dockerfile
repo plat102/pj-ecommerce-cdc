@@ -1,8 +1,10 @@
 # Stage 1: export locked requirements from uv (uv itself is not in the runtime image)
-FROM ghcr.io/astral-sh/uv:0.11.14 AS uv-export
+# Alpine variant is used because the default distroless uv image lacks /bin/sh,
+# which Docker's shell-form RUN needs.
+FROM ghcr.io/astral-sh/uv:0.11.14-alpine AS uv-export
 WORKDIR /export
 COPY pyproject.toml uv.lock ./
-RUN uv export --frozen --no-hashes --no-dev -o requirements.txt
+RUN uv export --frozen --no-hashes --no-dev --no-emit-project -o requirements.txt
 
 # Stage 2: runtime image
 FROM python:3.11-slim
