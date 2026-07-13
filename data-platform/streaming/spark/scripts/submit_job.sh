@@ -61,6 +61,10 @@ echo "⚡ Spark Master: $SPARK_MASTER"
 # Set environment variables
 export DEBUG_MODE=$DEBUG_MODE
 
+# Path to metrics.properties inside the pyspark-jupyter container.
+# The `data-platform/streaming` tree is bind-mounted at /home/jupyter/src-streaming.
+METRICS_PROPS="${SPARK_METRICS_CONF:-/home/jupyter/src-streaming/spark/conf/metrics.properties}"
+
 # Submit Spark job
 spark-submit \
     --master $SPARK_MASTER \
@@ -69,6 +73,8 @@ spark-submit \
     "${OPENLINEAGE_CONFS[@]}" \
     --conf spark.streaming.stopGracefullyOnShutdown=true \
     --conf spark.sql.shuffle.partitions=8 \
+    --conf spark.ui.prometheus.enabled=true \
+    --conf spark.metrics.conf=$METRICS_PROPS \
     --py-files src/schemas/cdc_schemas.py,src/utils/helpers.py,src/config/app_config.py,src/jobs/customers_cdc_job.py,src/jobs/product_cdc_job.py,src/jobs/order_cdc_job.py \
     apps/run_cdc_job.py \
     --job-type $JOB_TYPE \

@@ -17,6 +17,7 @@ services:
 networks:
   ecommerce-network:
     driver: bridge
+    name: ecommerce-network
 
 volumes:
   postgres_data:

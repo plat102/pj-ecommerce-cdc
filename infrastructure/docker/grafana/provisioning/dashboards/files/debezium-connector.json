@@ -1,0 +1,68 @@
+{
+  "id": null,
+  "uid": "debezium-connector",
+  "title": "Debezium Connector",
+  "tags": ["observability", "debezium", "cdc"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Connector status (1 = RUNNING)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "kafka_connect_connector_status{status=\"running\"}", "legendFormat": "{{connector}}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 2,
+      "title": "Milliseconds since last event",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "debezium_metrics_millisecondssincelastevent", "legendFormat": "{{server}}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    },
+    {
+      "id": 3,
+      "title": "Committed events",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "rate(debezium_metrics_totalnumberofeventsseen[1m])", "legendFormat": "seen {{server}}", "refId": "A"},
+        {"expr": "rate(debezium_metrics_numberofcommittedtransactions[1m])", "legendFormat": "committed {{server}}", "refId": "B"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Queue size (rows waiting to be committed)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "debezium_metrics_queuetotalcapacity - debezium_metrics_queueremainingcapacity", "legendFormat": "{{server}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "JVM heap used",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "jvm_memory_bytes_used{area=\"heap\", job=\"debezium-jmx\"}", "legendFormat": "heap used", "refId": "A"},
+        {"expr": "jvm_memory_bytes_max{area=\"heap\", job=\"debezium-jmx\"}", "legendFormat": "heap max", "refId": "B"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

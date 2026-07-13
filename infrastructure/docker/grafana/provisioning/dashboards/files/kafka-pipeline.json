@@ -1,0 +1,54 @@
+{
+  "id": null,
+  "uid": "kafka-pipeline",
+  "title": "Kafka Pipeline",
+  "tags": ["observability", "kafka"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Consumer group lag (sum by group)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum by (consumergroup) (kafka_consumergroup_lag)", "legendFormat": "{{consumergroup}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Messages produced /s",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum by (topic) (rate(kafka_topic_partition_current_offset[1m]))", "legendFormat": "{{topic}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Broker up",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "kafka_brokers", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 4,
+      "title": "Topic partitions",
+      "type": "table",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "kafka_topic_partitions", "refId": "A", "instant": true, "format": "table"}
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

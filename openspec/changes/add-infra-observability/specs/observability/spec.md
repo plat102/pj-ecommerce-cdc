@@ -1,13 +1,13 @@
 ## ADDED Requirements
 
-> **Status:** Phase 1 (Foundation — Pillars 1+2) requirements are decomposed below. Phases 2/3/4 remain broad placeholders (`alerting-and-notification`, `service-resilience`, `otel-migration-path`) and will be decomposed as those phases land.
+> **Status:** Phase 1 (Foundation) and Phase 2 (Pipeline metrics) requirements are decomposed below. Phases 3/4 remain broad placeholders (`alerting-and-notification`, `service-resilience`, `otel-migration-path`) and will be decomposed as those phases land.
 >
 > **Decomposition status:**
 >
 > | Placeholder | Decomposed? | Phase-scoped requirements |
 > |---|---|---|
 > | `log-aggregation` | Yes (Phase 1) | `central-log-aggregation` |
-> | `metrics-collection` | Partial (Phase 1) | `prometheus-scrape-configuration`, `container-metrics-collection`; Phase 2 adds `kafka-lag-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`, `postgres-replication-metrics` |
+> | `metrics-collection` | Yes (Phases 1+2) | `prometheus-scrape-configuration`, `container-metrics-collection`, `kafka-lag-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`, `postgres-replication-metrics` |
 > | `grafana-observability-datasources` | Yes (Phase 1, spans Pillars 1+2) | `grafana-observability-datasources` |
 > | `alerting-and-notification` | Not yet | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
 > | `service-resilience` | Not yet | `service-restart-policies`, `service-healthchecks` |
@@ -62,6 +62,52 @@ Grafana SHALL be provisioned with three datasources: the existing `ClickHouse-An
 #### Scenario: datasources are not UI-editable
 - **WHEN** an admin opens the Loki or Prometheus datasource in Grafana's UI
 - **THEN** the "Save" button SHALL be disabled because `editable: false` is set in the provisioned YAML
+
+**Phase 2 — Pipeline metrics (decomposed from `metrics-collection` for the pipeline-source portion).**
+
+### Requirement: kafka-lag-metrics
+A `danielqsj/kafka-exporter:v1.8.0` container SHALL run with `platform: linux/amd64` (image is amd64-only), connect to `kafka1:9092`, and expose Kafka broker + consumer-group metrics on port 9308. Prometheus SHALL scrape it every 15s under the `kafka-exporter` job.
+
+#### Scenario: broker metrics available
+- **WHEN** the observability stack is up and connected to a running Kafka broker
+- **THEN** `curl -sG 'http://localhost:9090/api/v1/query?query=kafka_brokers'` SHALL return at least one series with value 1
+
+#### Scenario: consumer lag observable when Spark is consuming
+- **WHEN** a Spark CDC job is running and consuming from `pg.public.*` topics
+- **THEN** `kafka_consumergroup_lag_sum` SHALL be queryable from Prometheus and return non-null values for the Spark consumer group; the Kafka Pipeline dashboard SHALL surface it
+
+### Requirement: debezium-connector-metrics
+The Debezium container SHALL run with `KAFKA_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent-<version>.jar=5556:/opt/jmx-exporter/debezium-jmx.yml` and expose Kafka Connect + Debezium JMX metrics at `http://debezium:5556/metrics`. The jmx-exporter jar SHALL be fetched via `scripts/setup_observability.sh` and bind-mounted from `infrastructure/docker/jmx-exporter/` (the jar itself is gitignored). Prometheus SHALL scrape it under the `debezium-jmx` job. The YAML rule file SHALL translate `kafka.connect.*` and `debezium.postgres.*` MBeans into named metrics (`kafka_connect_connector_status`, `debezium_metrics_*`).
+
+#### Scenario: JMX metrics reachable
+- **WHEN** the Debezium container has been running for at least 30 seconds under the observability configuration
+- **THEN** `curl http://localhost:5556/metrics` SHALL return a Prometheus-formatted response containing at minimum `kafka_connect_connector_status` and `debezium_metrics_millisecondssincelastevent`
+
+#### Scenario: connector state numeric
+- **WHEN** the Debezium `pg-connector-ecommerce` is in RUNNING state
+- **THEN** `kafka_connect_connector_status{connector="pg-connector-ecommerce", status="running"}` SHALL return 1 in Prometheus
+
+### Requirement: spark-streaming-metrics
+The Spark CDC jobs submitted via `data-platform/streaming/spark/scripts/submit_job.sh` SHALL be launched with `--conf spark.ui.prometheus.enabled=true --conf spark.metrics.conf=<path-to-metrics.properties>`. The `metrics.properties` file SHALL live under `data-platform/streaming/spark/conf/` and declare the built-in `PrometheusServlet` sink. Prometheus SHALL scrape `ed-pyspark-jupyter:4040/metrics/prometheus` under the `spark` job; scrape failures while no Spark job is running SHALL be treated as expected (target `down` is benign).
+
+#### Scenario: metrics endpoint available while a job runs
+- **WHEN** a Spark CDC job has been running in production mode for at least 30 seconds
+- **THEN** `curl http://localhost:4040/metrics/prometheus` SHALL return Prometheus-formatted metrics including at minimum `spark_streaming_query_lastCompletedBatchId` and `spark_streaming_query_inputRate`
+
+#### Scenario: target down when no Spark job is running
+- **WHEN** no Spark job is executing (Spark UI port not bound to a driver)
+- **THEN** the Prometheus target `spark` MAY report `down` and this SHALL NOT be considered a stack failure; the Spark Streaming dashboard SHALL indicate the job is not running via the `up{job="spark"}` panel
+
+### Requirement: postgres-replication-metrics
+A `prometheuscommunity/postgres-exporter:v0.15.0` container SHALL run with a connection string pointing at the source Postgres database and a custom queries file at `infrastructure/docker/postgres-exporter/queries.yaml` that surfaces `pg_replication_slots` state and `pg_stat_replication` reply lag. Prometheus SHALL scrape it under the `postgres-exporter` job. The custom queries SHALL specifically expose the Debezium replication slot state so the Postgres Replication dashboard can show whether Debezium is connected and how many bytes of WAL are unconsumed.
+
+#### Scenario: Debezium slot state observable
+- **WHEN** the Debezium connector is registered and connected to Postgres
+- **THEN** `pg_replication_active{slot_name="debezium_slot"}` SHALL be queryable in Prometheus and return 1
+
+#### Scenario: replication lag bytes observable
+- **WHEN** postgres-exporter has completed at least one scrape
+- **THEN** `pg_replication_lag_bytes{slot_name="debezium_slot"}` SHALL be queryable and return a non-negative value
 
 ### Requirement: alerting-and-notification
 Alert rules SHALL be provisioned covering the failure classes the pipeline actually hits, and each alert SHALL be wired to at least one contact point so notifications reach an external channel (webhook.site, Slack, or similar) rather than dying in the Grafana UI.

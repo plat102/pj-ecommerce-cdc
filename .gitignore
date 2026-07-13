@@ -91,3 +91,6 @@ infrastructure/terraform/terraform.tfstate.backup
 infrastructure/terraform/crash.log
 infrastructure/terraform/.terraform.tfstate.*
 infrastructure/terraform/terraform.tfvars
+
+# jmx-exporter jar fetched by scripts/setup_observability.sh; not committed.
+infrastructure/docker/jmx-exporter/*.jar

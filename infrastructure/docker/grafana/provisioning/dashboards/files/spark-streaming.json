@@ -1,0 +1,76 @@
+{
+  "id": null,
+  "uid": "spark-streaming",
+  "title": "Spark Streaming",
+  "tags": ["observability", "spark"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Last completed batch ID",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "max(spark_streaming_query_lastCompletedBatchId)", "refId": "A"}
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Batches / minute",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "60 * rate(spark_streaming_query_lastCompletedBatchId[5m])", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Job up (Spark UI reachable)",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "up{job=\"spark\"}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}}
+    },
+    {
+      "id": 4,
+      "title": "Input rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "spark_streaming_query_inputRate", "legendFormat": "{{query}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Processing time (ms)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "spark_streaming_query_processingTime", "legendFormat": "{{query}}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    },
+    {
+      "id": 6,
+      "title": "Driver heap used",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "metrics_driver_jvm_heap_used_MB{job=\"spark\"} * 1024 * 1024", "legendFormat": "driver heap", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "bytes"}}
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

@@ -1,0 +1,65 @@
+# jmx-exporter config for Debezium (Kafka Connect worker + Debezium PG connector).
+# Consumed by the javaagent inside the debezium container; served at :5556.
+#
+# Two categories of metrics:
+#   1. Kafka Connect: connector + task state, worker health.
+#   2. Debezium PostgreSQL: snapshot progress, streaming lag, event counts.
+#
+# JVM heap/GC metrics come free from the default jmx-exporter built-in rules.
+
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+
+rules:
+  # -------------------------------------------------------------------------
+  # Kafka Connect — connector/task state (RUNNING / PAUSED / FAILED)
+  # -------------------------------------------------------------------------
+  - pattern: 'kafka.connect<type=connector-metrics, connector=(.+)><>(status): (.+)'
+    name: kafka_connect_connector_status
+    labels:
+      connector: "$1"
+      status: "$3"
+    type: GAUGE
+    value: 1
+
+  - pattern: 'kafka.connect<type=connect-worker-metrics><>(.+): (.+)'
+    name: kafka_connect_worker_$1
+    type: GAUGE
+
+  - pattern: 'kafka.connect<type=connect-worker-rebalance-metrics><>(.+): (.+)'
+    name: kafka_connect_worker_rebalance_$1
+    type: GAUGE
+
+  - pattern: 'kafka.connect<type=connector-task-metrics, connector=(.+), task=(.+)><>(.+): (.+)'
+    name: kafka_connect_connector_task_$3
+    labels:
+      connector: "$1"
+      task: "$2"
+    type: GAUGE
+
+  # Source task specifics (throughput, offset, latency)
+  - pattern: 'kafka.connect<type=source-task-metrics, connector=(.+), task=(.+)><>(.+): (.+)'
+    name: kafka_connect_source_task_$3
+    labels:
+      connector: "$1"
+      task: "$2"
+    type: GAUGE
+
+  # -------------------------------------------------------------------------
+  # Debezium PostgreSQL connector metrics
+  # (See debezium.io docs § "Monitoring for the PostgreSQL connector")
+  # -------------------------------------------------------------------------
+  - pattern: 'debezium.postgres<type=connector-metrics, context=(.+), server=(.+)><>(.+): (.+)'
+    name: debezium_metrics_$3
+    labels:
+      context: "$1"
+      server: "$2"
+    type: GAUGE
+
+  - pattern: 'debezium.postgres<type=connector-metrics, context=(.+), server=(.+), task=(.+)><>(.+): (.+)'
+    name: debezium_metrics_$4
+    labels:
+      context: "$1"
+      server: "$2"
+      task: "$3"
+    type: GAUGE

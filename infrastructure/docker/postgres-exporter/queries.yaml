@@ -1,0 +1,45 @@
+# Custom queries for postgres-exporter.
+# Surfaces CDC-relevant metrics that the default collectors don't ship:
+# replication slot lag (bytes + seconds) and Debezium slot presence.
+#
+# Debezium's default slot name is `debezium_slot` (see register-pg.json).
+
+pg_replication:
+  query: |
+    SELECT
+      slot_name,
+      slot_type,
+      COALESCE(active::int, 0) AS active,
+      COALESCE(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn), 0) AS lag_bytes
+    FROM pg_replication_slots
+  metrics:
+    - slot_name:
+        usage: LABEL
+        description: Replication slot name (Debezium uses `debezium_slot`).
+    - slot_type:
+        usage: LABEL
+        description: Slot type (physical or logical).
+    - active:
+        usage: GAUGE
+        description: 1 if the slot has a consumer attached (Debezium connected).
+    - lag_bytes:
+        usage: GAUGE
+        description: Bytes accumulated in WAL that the slot has not yet confirmed.
+
+pg_stat_replication_extended:
+  query: |
+    SELECT
+      COALESCE(application_name, 'unknown') AS application_name,
+      COALESCE(state, 'unknown') AS state,
+      COALESCE(EXTRACT(EPOCH FROM (now() - reply_time))::float, 0) AS reply_lag_seconds
+    FROM pg_stat_replication
+  metrics:
+    - application_name:
+        usage: LABEL
+        description: Replica application name.
+    - state:
+        usage: LABEL
+        description: Replication state (streaming, catchup, etc.).
+    - reply_lag_seconds:
+        usage: GAUGE
+        description: Seconds since the replica last replied.

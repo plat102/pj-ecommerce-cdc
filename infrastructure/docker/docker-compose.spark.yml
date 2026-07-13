@@ -25,3 +25,4 @@ volumes:
 networks:
   ecommerce-network:
     external: true
+    name: ecommerce-network

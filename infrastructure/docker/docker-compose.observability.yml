@@ -105,6 +105,42 @@ services:
     networks:
       - ecommerce-network
 
+  # ---------------------------------------------------------------------
+  # Phase 2 — Pipeline exporters
+  # ---------------------------------------------------------------------
+
+  kafka-exporter:
+    # danielqsj/kafka-exporter is amd64-only — force platform explicitly on
+    # arm64 hosts (Apple Silicon). Runs under Rosetta emulation.
+    image: danielqsj/kafka-exporter:v1.8.0
+    platform: linux/amd64
+    container_name: kafka-exporter
+    depends_on:
+      - loki  # weak ordering; kafka1 lives in a sibling compose file
+    ports:
+      - "9308:9308"
+    command:
+      - --kafka.server=kafka1:9092
+      - --kafka.version=3.7.0
+      - --log.level=warn
+    networks:
+      - ecommerce-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    ports:
+      - "9187:9187"
+    environment:
+      # Anonymous connection string; local dev only. Postgres credentials
+      # come from the shared .env (POSTGRES_USER / POSTGRES_PASSWORD).
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes:
+      - ./postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    networks:
+      - ecommerce-network
+
 volumes:
   loki_data:
   prometheus_data:
