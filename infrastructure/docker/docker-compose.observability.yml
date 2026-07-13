@@ -1,0 +1,116 @@
+# Infrastructure observability stack. Ships in make up by default (~700MB
+# footprint fits the 1GB local-dev budget).
+#
+# Phase 1 (this file):
+#   - loki:           log store, filesystem storage, 7d retention
+#   - alloy:          Docker container-log shipper -> Loki
+#   - prometheus:     metric store, 7d/1GB retention
+#   - cadvisor:       per-container CPU/mem/net/disk metrics
+#   - node-exporter:  host-level metrics (VM on Docker Desktop Mac)
+#
+# Phase 2 (added later):
+#   - kafka-exporter, postgres-exporter, debezium jmx sidecar (in debezium compose)
+#
+# Phase 3 (added later): restart policies + healthchecks land here and in
+# neighbouring compose files.
+
+services:
+  loki:
+    image: grafana/loki:2.9.10
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - ecommerce-network
+
+  alloy:
+    image: grafana/alloy:v1.4.3
+    container_name: alloy
+    depends_on:
+      - loki
+    ports:
+      - "12345:12345"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - ecommerce-network
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=1GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ecommerce-network
+
+  cadvisor:
+    # Use the arm64-native build when running on Apple Silicon: cAdvisor
+    # reads /proc/cpuinfo and the amd64 build under Rosetta cannot parse the
+    # emulated CPU description ("Failed to detect clock speed").
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    platform: ${CADVISOR_PLATFORM:-linux/arm64}
+    container_name: cadvisor
+    # Host 8082 -> container 8080: avoids clash with redpanda-console on 8080.
+    ports:
+      - "8082:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    privileged: true
+    networks:
+      - ecommerce-network
+
+  node-exporter:
+    # On Docker Desktop Mac the reported host is the LinuxKit VM, not macOS.
+    # Skip the rootfs bind mount because Docker Desktop's kernel doesn't
+    # expose a shared/slave mount for `/`; the built-in collectors still
+    # produce useful VM-level CPU/mem/net signal for headroom monitoring.
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks:
+      - ecommerce-network
+
+volumes:
+  loki_data:
+  prometheus_data:
+  alloy_data:
+
+networks:
+  ecommerce-network:
+    external: true
+    name: ecommerce-network

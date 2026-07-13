@@ -1,0 +1,54 @@
+# Prometheus scrape config for the ecommerce-cdc stack.
+#
+# Phase 1 scrapes cAdvisor + node-exporter. Phase 2 adds kafka-exporter,
+# postgres-exporter, Debezium jmx sidecar, and Spark's Prometheus servlet.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: ecommerce-cdc
+
+scrape_configs:
+  # Prometheus scrapes itself so /targets always has a row.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Per-container metrics from the Docker daemon.
+  # cAdvisor default labels blow up cardinality; drop the volatile `id` label
+  # and keep `name`, `image`, `container_label_*` for the compose_service tag.
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metric_relabel_configs:
+      # Drop the volatile per-container `id` label to bound Prometheus cardinality.
+      - regex: 'id'
+        action: labeldrop
+      - source_labels: [container_label_com_docker_compose_service]
+        target_label: compose_service
+
+  # Host-level metrics. On Docker Desktop Mac this reports the Linux VM.
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # ---------------------------------------------------------------------
+  # Phase 2 targets (uncomment once the exporters ship):
+  # ---------------------------------------------------------------------
+  # - job_name: kafka-exporter
+  #   static_configs:
+  #     - targets: ['kafka-exporter:9308']
+  #
+  # - job_name: postgres-exporter
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #
+  # - job_name: debezium-jmx
+  #   static_configs:
+  #     - targets: ['debezium:5556']
+  #
+  # - job_name: spark
+  #   metrics_path: /metrics/prometheus
+  #   static_configs:
+  #     - targets: ['ed-pyspark-jupyter:4040']

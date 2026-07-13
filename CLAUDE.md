@@ -104,5 +104,13 @@ ClickHouse target tables use `ReplacingMergeTree` keyed on `_version` (sourced f
 - Grafana: http://localhost:3000 (admin / `GRAFANA_ADMIN_PASSWORD` from `.env`)
 - Debezium UI: http://localhost:8085 — Connect REST API: http://localhost:8083
 - Redpanda Console (Kafka): http://localhost:8080
+- Apicurio Registry (Schema): http://localhost:8081
 - ClickHouse HTTP: http://localhost:8123 — native: 9000
 - Spark UI: http://localhost:4040 — Jupyter: http://localhost:8888
+
+### Observability
+- Prometheus: http://localhost:9090
+- Loki (query API only, use Grafana Explore to view logs): http://localhost:3100
+- cAdvisor (container metrics UI): http://localhost:8082
+- node-exporter (host metrics scrape endpoint): http://localhost:9100/metrics
+- Alloy UI (log shipper debug): http://localhost:12345

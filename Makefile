@@ -11,6 +11,7 @@ COMPOSE_UI := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.ui.yml
 COMPOSE_SPARK := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.spark.yml
 COMPOSE_ANALYTICS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.analytics.yml
 COMPOSE_GOVERNANCE := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.governance.yml
+COMPOSE_OBS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.observability.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
@@ -18,7 +19,8 @@ COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.debezium.yml \
 	-f $(DOCKER_DIR)/docker-compose.ui.yml \
 	-f $(DOCKER_DIR)/docker-compose.spark.yml \
-	-f $(DOCKER_DIR)/docker-compose.analytics.yml
+	-f $(DOCKER_DIR)/docker-compose.analytics.yml \
+	-f $(DOCKER_DIR)/docker-compose.observability.yml
 
 include $(ENV_FILE)
 export $(shell sed 's/=.*//' $(ENV_FILE))
@@ -281,6 +283,22 @@ logs-governance: ## Show OpenMetadata logs
 
 status-governance: ## Show OpenMetadata stack status
 	$(COMPOSE_GOVERNANCE) ps
+
+#=====================================================
+# --- Observability (Loki + Prometheus + Alloy) ------
+#=====================================================
+
+up-observability: ## Start observability stack (loki + alloy + prometheus + cadvisor + node-exporter)
+	$(COMPOSE_OBS) up -d
+
+down-observability: ## Stop observability stack
+	$(COMPOSE_OBS) down --remove-orphans
+
+logs-observability: ## Tail observability stack logs
+	$(COMPOSE_OBS) logs -f
+
+status-observability: ## Show observability stack status
+	$(COMPOSE_OBS) ps
 
 grafana-url: ## Show Grafana access info
 	@echo "🔗 Grafana URL: http://localhost:3000"

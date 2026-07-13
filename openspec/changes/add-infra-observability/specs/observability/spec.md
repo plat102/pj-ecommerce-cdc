@@ -1,34 +1,67 @@
 ## ADDED Requirements
 
-> **Status:** Placeholder requirements for the design-only phase of this proposal. Detailed scenarios for each phase (foundation, pipeline metrics, alerts + reliability, optional OTEL) will be filled in as that phase reaches implementation. See `design.md` for the full direction.
+> **Status:** Phase 1 (Foundation — Pillars 1+2) requirements are decomposed below. Phases 2/3/4 remain broad placeholders (`alerting-and-notification`, `service-resilience`, `otel-migration-path`) and will be decomposed as those phases land.
 >
-> **On archive**, each broad placeholder below decomposes into the phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared":
+> **Decomposition status:**
 >
-> | Placeholder here | Decomposes into (on archive) |
-> |---|---|
-> | `log-aggregation` | `central-log-aggregation`, `grafana-observability-datasources` (Loki side) |
-> | `metrics-collection` | `prometheus-scrape-configuration`, `container-metrics-collection`, `grafana-observability-datasources` (Prom side), `kafka-lag-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`, `postgres-replication-metrics` |
-> | `alerting-and-notification` | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
-> | `service-resilience` | `service-restart-policies`, `service-healthchecks` |
-> | `otel-migration-path` (optional Phase 4) | `otel-collector-pipeline`, `otlp-ingestion-endpoint` |
+> | Placeholder | Decomposed? | Phase-scoped requirements |
+> |---|---|---|
+> | `log-aggregation` | Yes (Phase 1) | `central-log-aggregation` |
+> | `metrics-collection` | Partial (Phase 1) | `prometheus-scrape-configuration`, `container-metrics-collection`; Phase 2 adds `kafka-lag-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`, `postgres-replication-metrics` |
+> | `grafana-observability-datasources` | Yes (Phase 1, spans Pillars 1+2) | `grafana-observability-datasources` |
+> | `alerting-and-notification` | Not yet | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
+> | `service-resilience` | Not yet | `service-restart-policies`, `service-healthchecks` |
+> | `otel-migration-path` (optional Phase 4) | Not yet | `otel-collector-pipeline`, `otlp-ingestion-endpoint` |
 
-### Requirement: log-aggregation
-All Docker container stdout/stderr output SHALL be tailed by a shipping agent and stored in a queryable log store, with each line tagged by container identity so a developer can filter to one service across the whole stack.
+**Phase 1 — Foundation (decomposed from `log-aggregation` and `metrics-collection` for the container/host portion).**
+
+### Requirement: central-log-aggregation
+All Docker container stdout/stderr output SHALL be tailed by a Grafana Alloy agent (from `grafana/alloy:v1.4.3`) and shipped to a single-binary Loki instance (`grafana/loki:2.9.10`) with filesystem storage and 168-hour (7-day) retention. Each log stream SHALL carry the labels `container`, `image`, `compose_service`, and `stream`. High-cardinality labels (the Docker-daemon `id`, container SHA) SHALL be dropped by Alloy relabeling.
 
 #### Scenario: developer filters logs by container
-- **WHEN** a developer opens Grafana Explore, selects the log datasource, and queries `{container="debezium"} |= "ERROR"`
-- **THEN** matching lines from the debezium container SHALL be returned within a few seconds, without requiring shell access or `docker logs`
+- **WHEN** a developer opens Grafana Explore, selects the Loki datasource, and queries `{container="debezium"} |= "ERROR"`
+- **THEN** matching lines from the debezium container SHALL be returned within a few seconds
 
-### Requirement: metrics-collection
-Infrastructure and pipeline metrics from every service in the stack SHALL be scraped by a Prometheus-compatible collector and be queryable via a Grafana datasource, covering container-level (CPU, memory, network, disk) and pipeline-level (Kafka consumer lag, Debezium connector state, Spark streaming progress, Postgres replication lag) signals.
+#### Scenario: labels bounded to a small set
+- **WHEN** a Loki label query `curl -s http://localhost:3100/loki/api/v1/labels` is executed
+- **THEN** the returned label set SHALL include `container`, `image`, `compose_service`, `stream` and SHALL NOT include the Docker-daemon `id` label
 
-#### Scenario: kafka consumer lag observable
-- **WHEN** a Spark CDC job is running and consuming from a `pg.public.*` topic
-- **THEN** the metric `kafka_consumergroup_lag_sum` for that consumer group SHALL be queryable from Grafana's Prometheus datasource and SHALL return non-null values
+#### Scenario: retention enforced
+- **WHEN** log lines older than 168 hours exist in Loki
+- **THEN** they SHALL be removed by the Loki compactor without manual intervention
 
-#### Scenario: container memory observable
-- **WHEN** the observability dashboard "Container Health" is opened
-- **THEN** every core CDC-pipeline container (postgres, kafka1, debezium, clickhouse) SHALL show non-null CPU and memory panels
+### Requirement: prometheus-scrape-configuration
+A Prometheus instance (`prom/prometheus:v2.54.1`) SHALL run with `--storage.tsdb.retention.time=7d` and `--storage.tsdb.retention.size=1GB` and scrape configs SHALL live in `infrastructure/docker/prometheus/prometheus.yml` with a global 15-second interval. Phase 1 SHALL scrape at minimum `cadvisor:8080` and `node-exporter:9100`; Phase 2 SHALL extend scrapes to include the exporters and JMX/servlet endpoints defined by `kafka-lag-metrics`, `postgres-replication-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`.
+
+#### Scenario: retention flags applied
+- **WHEN** the running Prometheus process is inspected (e.g., `docker inspect prometheus`)
+- **THEN** its command line SHALL include both `--storage.tsdb.retention.time=7d` and `--storage.tsdb.retention.size=1GB`
+
+#### Scenario: Phase 1 targets healthy
+- **WHEN** `curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | {job, health}]'` is executed
+- **THEN** the `cadvisor` and `node-exporter` jobs SHALL both report `up`
+
+### Requirement: container-metrics-collection
+cAdvisor (`gcr.io/cadvisor/cadvisor:v0.49.1`) SHALL run mounted read-only on the Docker socket, `/rootfs`, `/sys`, `/var/lib/docker`, and `/dev/disk`, and expose per-container CPU, memory, network, and disk I/O metrics on port 8080 (container-side; host port 8082 to avoid clashing with redpanda-console). node-exporter (`prom/node-exporter:v1.8.2`) SHALL run with `--path.rootfs=/host` and expose host-level metrics on port 9100. Both SHALL be scraped by Prometheus every 15 seconds. The `id` label SHALL be dropped in scrape-side `metric_relabel_configs` to bound cardinality across container restarts.
+
+#### Scenario: per-container metrics available
+- **WHEN** the Container Health dashboard is opened in Grafana
+- **THEN** every core CDC-pipeline container (postgres, kafka1, debezium, clickhouse) SHALL show non-null CPU-usage and memory-usage panels
+
+#### Scenario: id label dropped
+- **WHEN** any Prometheus metric produced by cAdvisor is inspected via `curl -sG 'http://localhost:9090/api/v1/query' --data-urlencode 'query=container_memory_usage_bytes'`
+- **THEN** no returned time series SHALL carry an `id` label
+
+### Requirement: grafana-observability-datasources
+Grafana SHALL be provisioned with three datasources: the existing `ClickHouse-Analytics` (business data) plus two new observability datasources — `Loki` pointing at `http://loki:3100` and `Prometheus` pointing at `http://prometheus:9090`. Both new datasources SHALL be provisioned as files under `infrastructure/docker/grafana/provisioning/datasources/`, with `editable: false` so a UI-side edit cannot silently drift from the provisioned truth.
+
+#### Scenario: three datasources present after startup
+- **WHEN** the Grafana datasources page `http://localhost:3000/datasources` is opened
+- **THEN** `ClickHouse-Analytics`, `Loki`, and `Prometheus` SHALL each be listed with a passing "Save & test"
+
+#### Scenario: datasources are not UI-editable
+- **WHEN** an admin opens the Loki or Prometheus datasource in Grafana's UI
+- **THEN** the "Save" button SHALL be disabled because `editable: false` is set in the provisioned YAML
 
 ### Requirement: alerting-and-notification
 Alert rules SHALL be provisioned covering the failure classes the pipeline actually hits, and each alert SHALL be wired to at least one contact point so notifications reach an external channel (webhook.site, Slack, or similar) rather than dying in the Grafana UI.

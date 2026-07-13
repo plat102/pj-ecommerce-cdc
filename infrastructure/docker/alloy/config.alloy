@@ -1,0 +1,86 @@
+// Alloy config: discover Docker containers via the daemon socket, tail their
+// JSON log files, extract labels, ship to Loki.
+//
+// Labels kept per stream: container, image, compose_service.
+// The high-cardinality `id` label is dropped in the relabel step below.
+
+// -------------------------------------------------------------------------
+// Discovery: enumerate containers via /var/run/docker.sock
+// -------------------------------------------------------------------------
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "10s"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Keep only meaningful labels; drop volatile Docker-internal ones.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  // Extract image basename (drop registry + tag) to keep cardinality bounded.
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    regex         = ".*/([^:]+)(:.*)?"
+    target_label  = "image"
+    replacement   = "$1"
+  }
+}
+
+// -------------------------------------------------------------------------
+// Source: read Docker's per-container JSON log files
+// -------------------------------------------------------------------------
+loki.source.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.containers.output
+  forward_to       = [loki.process.stack.receiver]
+  refresh_interval = "5s"
+}
+
+// -------------------------------------------------------------------------
+// Process: parse Docker JSON log envelope, keep useful fields only
+// -------------------------------------------------------------------------
+loki.process "stack" {
+  forward_to = [loki.write.default.receiver]
+
+  // Only keep the fields we care about; drop noisy Docker-daemon internals.
+  stage.labels {
+    values = {
+      container       = "",
+      image           = "",
+      compose_service = "",
+      stream          = "",
+    }
+  }
+
+  // Bound line size defensively; Loki also enforces its own limit.
+  stage.limit {
+    rate  = 5000
+    burst = 10000
+  }
+}
+
+// -------------------------------------------------------------------------
+// Sink: Loki push endpoint
+// -------------------------------------------------------------------------
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
