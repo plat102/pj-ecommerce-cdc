@@ -18,20 +18,29 @@ services:
   loki:
     image: grafana/loki:2.9.10
     container_name: loki
+    restart: unless-stopped
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki_data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready | grep -q ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - ecommerce-network
 
   alloy:
     image: grafana/alloy:v1.4.3
     container_name: alloy
+    restart: on-failure:3
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
     ports:
       - "12345:12345"
     command:
@@ -50,6 +59,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: prometheus
+    restart: unless-stopped
     ports:
       - "9090:9090"
     command:
@@ -61,6 +71,11 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/ready >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     networks:
       - ecommerce-network
 
@@ -71,6 +86,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     platform: ${CADVISOR_PLATFORM:-linux/arm64}
     container_name: cadvisor
+    restart: on-failure:3
     # Host 8082 -> container 8080: avoids clash with redpanda-console on 8080.
     ports:
       - "8082:8080"
@@ -93,6 +109,7 @@ services:
     # produce useful VM-level CPU/mem/net signal for headroom monitoring.
     image: prom/node-exporter:v1.8.2
     container_name: node-exporter
+    restart: on-failure:3
     ports:
       - "9100:9100"
     command:
@@ -115,6 +132,7 @@ services:
     image: danielqsj/kafka-exporter:v1.8.0
     platform: linux/amd64
     container_name: kafka-exporter
+    restart: on-failure:3
     depends_on:
       - loki  # weak ordering; kafka1 lives in a sibling compose file
     ports:
@@ -129,6 +147,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: postgres-exporter
+    restart: on-failure:3
     ports:
       - "9187:9187"
     environment:

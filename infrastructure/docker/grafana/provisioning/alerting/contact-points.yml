@@ -1,0 +1,51 @@
+# Grafana alert contact points (notification channels).
+#
+# Reads from environment (Grafana expands `$OBS_ALERT_WEBHOOK_URL` etc at
+# runtime). Both values default to empty strings if unset in .env — Grafana
+# will still keep alert state in-UI but no external POST fires. This is
+# intentional so a developer without a webhook URL still sees the alerting
+# UI light up on the Alerting page.
+#
+# Get a free test webhook: https://webhook.site — copy the "Your unique URL"
+# into OBS_ALERT_WEBHOOK_URL in infrastructure/docker/.env
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: default-webhook
+    receivers:
+      - uid: default-webhook-receiver
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          # OBS_ALERT_WEBHOOK_URL must be set in .env — Grafana requires
+          # non-empty URL for provisioning to accept the config. Default in
+          # .env.example is http://127.0.0.1:9999/noop which fails delivery
+          # cleanly and lets alerts stay visible in the Grafana UI. Override
+          # in .env with a webhook.site URL to receive real notifications.
+          url: ${OBS_ALERT_WEBHOOK_URL}
+          httpMethod: POST
+          maxAlerts: 0
+
+  - orgId: 1
+    name: slack
+    receivers:
+      - uid: slack-receiver
+        type: slack
+        disableResolveMessage: false
+        settings:
+          url: ${OBS_SLACK_WEBHOOK_URL}
+          # Grafana renders a Slack-friendly payload by default; keeps
+          # observability alerts distinguishable from data-governance ones.
+          title: '[{{ .CommonLabels.severity }}] {{ .CommonLabels.alertname }}'
+
+policies:
+  - orgId: 1
+    receiver: default-webhook
+    group_by: [alertname, severity]
+    group_wait: 10s
+    group_interval: 30s
+    repeat_interval: 4h
+    # No route matchers: everything defaults to default-webhook unless a
+    # rule sets its own receiver via notificationSettings.

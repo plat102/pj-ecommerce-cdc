@@ -2,9 +2,18 @@ services:
   debezium:
     image: debezium/connect:${DEBEZIUM_IMAGE_TAG:-2.7.3.Final}
     container_name: debezium
+    restart: on-failure:3
     depends_on:
-      - kafka1
-      - schema-registry
+      kafka1:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/connectors >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     ports:
       - "8083:8083"   # Kafka Connect REST API
       - "5556:5556"   # jmx-exporter javaagent (Phase 2 observability)
@@ -48,8 +57,10 @@ services:
   debezium-ui:
     image: quay.io/debezium/debezium-ui:${DEBEZIUM_UI_IMAGE_TAG:-2.5}
     container_name: debezium-ui
+    restart: on-failure:3
     depends_on:
-      - debezium
+      debezium:
+        condition: service_started
     ports:
       - "8085:8080"  # UI port
     environment:

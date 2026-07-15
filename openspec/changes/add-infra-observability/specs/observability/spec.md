@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Phase 1 (Foundation) and Phase 2 (Pipeline metrics) requirements are decomposed below. Phases 3/4 remain broad placeholders (`alerting-and-notification`, `service-resilience`, `otel-migration-path`) and will be decomposed as those phases land.
+> **Status:** Phases 1 (Foundation), 2 (Pipeline metrics), and 3 (Alerts + resilience) requirements are decomposed below. Phase 4 (OTEL migration path) remains a placeholder.
 >
 > **Decomposition status:**
 >
@@ -9,8 +9,8 @@
 > | `log-aggregation` | Yes (Phase 1) | `central-log-aggregation` |
 > | `metrics-collection` | Yes (Phases 1+2) | `prometheus-scrape-configuration`, `container-metrics-collection`, `kafka-lag-metrics`, `debezium-connector-metrics`, `spark-streaming-metrics`, `postgres-replication-metrics` |
 > | `grafana-observability-datasources` | Yes (Phase 1, spans Pillars 1+2) | `grafana-observability-datasources` |
-> | `alerting-and-notification` | Not yet | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
-> | `service-resilience` | Not yet | `service-restart-policies`, `service-healthchecks` |
+> | `alerting-and-notification` | Yes (Phase 3) | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
+> | `service-resilience` | Yes (Phase 3) | `service-restart-policies`, `service-healthchecks` |
 > | `otel-migration-path` (optional Phase 4) | Not yet | `otel-collector-pipeline`, `otlp-ingestion-endpoint` |
 
 **Phase 1 — Foundation (decomposed from `log-aggregation` and `metrics-collection` for the container/host portion).**
@@ -109,20 +109,48 @@ A `prometheuscommunity/postgres-exporter:v0.15.0` container SHALL run with a con
 - **WHEN** postgres-exporter has completed at least one scrape
 - **THEN** `pg_replication_lag_bytes{slot_name="debezium_slot"}` SHALL be queryable and return a non-negative value
 
-### Requirement: alerting-and-notification
-Alert rules SHALL be provisioned covering the failure classes the pipeline actually hits, and each alert SHALL be wired to at least one contact point so notifications reach an external channel (webhook.site, Slack, or similar) rather than dying in the Grafana UI.
+**Phase 3 — Alerts + service resilience (decomposed from `alerting-and-notification` and `service-resilience`).**
 
-#### Scenario: connector failure notifies
-- **WHEN** the Debezium connector `pg-connector-ecommerce` transitions to a state other than RUNNING for more than 1 minute
-- **THEN** an alert SHALL fire AND a notification SHALL be posted to the configured webhook contact point
+### Requirement: infrastructure-alert-rules
+Grafana SHALL be provisioned with alert rules covering the failure classes the pipeline actually hits. The rules SHALL live under `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml` and SHALL include at minimum: `kafka_consumer_lag_high` (sum-by-consumergroup lag > 10000, for 5m, warning); `debezium_connector_not_running` (kafka_connect_connector_status{status="running"} < 1, for 1m, critical); `spark_streaming_job_absent` (no batch progress in 10 min, for 5m, critical); `container_memory_over_90pct` (cAdvisor usage/limit > 0.9, for 10m, warning); `container_restart_loop` (>3 restarts in 10 min, for 2m, critical). All rules SHALL live in the `observability` Grafana folder.
 
-### Requirement: service-resilience
-Every service in the stack SHALL declare an appropriate `restart:` policy (stateful services SHALL restart unless stopped explicitly; stateless services SHALL restart on failure), and services with a well-defined readiness check SHALL declare a `healthcheck:` block so `depends_on: { condition: service_healthy }` can be used to sequence startup instead of time-based sleeps.
+#### Scenario: five infra rules provisioned
+- **WHEN** the Grafana Alerting page (`http://localhost:3000/alerting/list`) is opened after startup
+- **THEN** the folder `observability` SHALL contain (at minimum) the rules named above, each with a non-empty `condition`, `for` duration, and severity label
+
+#### Scenario: connector failure fires alert
+- **WHEN** the Debezium connector transitions away from RUNNING for more than 1 minute
+- **THEN** the `debezium_connector_not_running` rule SHALL enter the `Alerting` state
+
+### Requirement: alert-contact-point-webhook
+Grafana Unified Alerting SHALL be provisioned with a default webhook contact point that reads its URL from the `OBS_ALERT_WEBHOOK_URL` environment variable, and (optionally) a Slack contact point reading `OBS_SLACK_WEBHOOK_URL`. If the env vars are unset, the URL falls back to a noop placeholder so provisioning SHALL still succeed and alerts continue to appear in the Grafana UI even though external notifications SHALL NOT be delivered. The existing `cdc_freshness_10min_slo` rule (data-governance Phase 3) SHALL be updated to route through this default contact point.
+
+#### Scenario: contact points present after startup
+- **WHEN** `curl -u admin:<admin-password> http://localhost:3000/api/v1/provisioning/contact-points` is executed
+- **THEN** the response SHALL include at least the contact points `default-webhook` and `slack`
+
+#### Scenario: freshness alert wired to default contact point
+- **WHEN** the provisioned `data_freshness.yml` rule file is inspected
+- **THEN** the rule `cdc_freshness_10min_slo` SHALL declare `notification_settings.receiver: default-webhook`
+
+### Requirement: service-restart-policies
+Every service in the stack SHALL declare an appropriate `restart:` policy. Stateful services (postgres, kafka1, zookeeper, clickhouse, grafana, prometheus, loki, schema-registry) SHALL declare `restart: unless-stopped`. Stateless services (debezium, debezium-ui, redpanda-console, cdc-testing-ui, alloy, cadvisor, node-exporter, kafka-exporter, postgres-exporter) SHALL declare `restart: on-failure:3`. The dev Spark container (ed-pyspark-jupyter) SHALL NOT declare any restart policy so Spark-job death is visible via the `spark_streaming_job_absent` alert rather than hidden by auto-restart.
 
 #### Scenario: kafka auto-recovers from crash
 - **WHEN** `docker kill kafka1` is executed against a running stack
-- **THEN** within 30 seconds `docker ps` SHALL show `kafka1` in `Up (healthy)` state again, with the restart handled by Docker daemon per the declared policy
+- **THEN** within 30 seconds `docker ps` SHALL show `kafka1` in `Up` state again with the restart handled by Docker daemon per the declared policy
+
+#### Scenario: Spark death is NOT auto-recovered
+- **WHEN** `docker kill ed-pyspark-jupyter` is executed
+- **THEN** the container SHALL remain stopped; the `spark_streaming_job_absent` alert SHALL fire after its 5-minute confirmation window
+
+### Requirement: service-healthchecks
+Services with a well-defined readiness check SHALL declare a `healthcheck:` block: postgres (`pg_isready`), kafka1 (`kafka-topics --list`), debezium (`curl -f localhost:8083/connectors`), clickhouse (`wget --spider localhost:8123/ping`), schema-registry (`curl -f localhost:8080/apis/registry/v2/system/info`), grafana (`wget -qO- localhost:3000/api/health`), loki (`wget -qO- localhost:3100/ready`), prometheus (`wget -qO- localhost:9090/-/ready`), zookeeper (`echo ruok | nc -w 2 localhost 2181 | grep imok`). Downstream services SHALL use `depends_on: { condition: service_healthy }` on their dependencies so `make up` sequences without time-based sleep.
 
 #### Scenario: connector waits for kafka health
 - **WHEN** the stack starts from a cold `make up`
 - **THEN** the `debezium` container SHALL NOT start until `kafka1`'s healthcheck reports `healthy`, replacing the previous time-based startup race
+
+#### Scenario: all core services report healthy after startup
+- **WHEN** `make status` is run 90 seconds after `make up`
+- **THEN** every service with a declared healthcheck SHALL show `(healthy)` in its status column

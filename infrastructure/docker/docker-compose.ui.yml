@@ -4,6 +4,7 @@ services:
       context: ../../
       dockerfile: infrastructure/docker/streamlit/Dockerfile
     container_name: cdc-testing-ui
+    restart: on-failure:3
     ports:
       - "8501:8501"
     environment:

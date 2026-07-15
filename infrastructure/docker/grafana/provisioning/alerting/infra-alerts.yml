@@ -1,0 +1,180 @@
+apiVersion: 1
+
+# Observability alert rules. All rules route to the `default-webhook` contact
+# point via the root policy in contact-points.yml.
+
+groups:
+  - name: observability-pipeline
+    orgId: 1
+    folder: observability
+    interval: 1m
+    rules:
+      # ---------------------------------------------------------------
+      - uid: kafka_consumer_lag_high
+        title: Kafka consumer lag > 10k
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 300, to: 0}
+            model:
+              expr: sum by (consumergroup) (kafka_consumergroup_lag)
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [10000], type: gt}
+              refId: B
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Kafka consumer lag exceeded 10k messages
+          description: |
+            One or more Kafka consumer groups have accumulated > 10000
+            messages of lag for 5+ minutes. Spark consumers may be stalled
+            or throughput is insufficient. Inspect the Kafka Pipeline
+            dashboard and `make cdc-status`.
+        labels:
+          severity: warning
+          pillar: pipeline-health
+
+      # ---------------------------------------------------------------
+      - uid: debezium_connector_not_running
+        title: Debezium connector not RUNNING
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 60, to: 0}
+            model:
+              expr: sum(kafka_connect_connector_status{status="running"})
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [1], type: lt}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: Debezium connector state != RUNNING
+          description: |
+            The `pg-connector-ecommerce` connector is not reporting
+            RUNNING via JMX. Check the Debezium Connector dashboard,
+            `make check-connector`, and `make logs-debezium`.
+        labels:
+          severity: critical
+          pillar: pipeline-health
+
+      # ---------------------------------------------------------------
+      - uid: spark_streaming_job_absent
+        title: Spark streaming job absent (no batches for 10 min)
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              # Zero if either: the target is down, or no batch progress in
+              # the last 10 minutes. When Spark is up, this is the delta of
+              # lastCompletedBatchId; when down, absent() returns 1 which we
+              # invert via `or` so the whole expression yields 0.
+              expr: max(increase(spark_streaming_query_lastCompletedBatchId[10m])) or vector(0)
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [1], type: lt}
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Spark streaming job stopped producing batches
+          description: |
+            No new completed batches on `spark_streaming_query_lastCompletedBatchId`
+            in the last 10 minutes. Spark job may have crashed silently.
+            Check the Spark Streaming dashboard and `make logs-spark`.
+        labels:
+          severity: critical
+          pillar: pipeline-health
+
+      # ---------------------------------------------------------------
+      - uid: container_memory_over_90pct
+        title: Container memory > 90% of limit
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              expr: |
+                max by (name) (
+                  container_memory_usage_bytes{name!=""} /
+                  ignoring(name) group_left container_spec_memory_limit_bytes{name!=""}
+                )
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [0.9], type: gt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: Container memory > 90% of limit
+          description: |
+            One or more containers have sustained memory usage above 90%
+            of their limit for 10+ minutes. Consider bumping the limit or
+            investigating a leak. Inspect the Container Health dashboard.
+        labels:
+          severity: warning
+          pillar: infra-health
+
+      # ---------------------------------------------------------------
+      - uid: container_restart_loop
+        title: Container restarting repeatedly
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 600, to: 0}
+            model:
+              expr: max by (name) (changes(container_start_time_seconds{name!=""}[10m]))
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [3], type: gt}
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: Container restart loop detected
+          description: |
+            A container has restarted more than 3 times in 10 minutes.
+            Restart policy is masking a crashing service. Inspect the
+            container's logs in the Central Logs dashboard.
+        labels:
+          severity: critical
+          pillar: infra-health

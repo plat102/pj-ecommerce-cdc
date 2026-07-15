@@ -11,10 +11,11 @@ groups:
     rules:
       - uid: cdc_freshness_10min_slo
         title: CDC freshness > 10 min
-        condition: A
+        condition: B
         data:
           - refId: A
             datasourceUid: clickhouse
+            relativeTimeRange: {from: 300, to: 0}
             model:
               rawSql: |
                 SELECT max(minutes_since_last_update) AS value
@@ -22,6 +23,15 @@ groups:
               format: table
               intervalMs: 60000
               maxDataPoints: 1
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [10], type: gt}
+              refId: B
         noDataState: NoData
         execErrState: Alerting
         for: 2m
@@ -35,6 +45,8 @@ groups:
         labels:
           severity: warning
           pillar: data-quality
-        # Alert when `value > 10` (minutes since last update).
-        # Grafana 10.x classic_conditions on the tabular rawSql result:
-        # threshold check applied via evaluator below.
+        # Route notifications through the default contact point provisioned
+        # by observability Phase 3 (contact-points.yml). Closes the gap where
+        # this alert previously fired silently in the Grafana UI.
+        notification_settings:
+          receiver: default-webhook
