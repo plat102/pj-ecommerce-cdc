@@ -6,7 +6,7 @@ apiVersion: 1
 groups:
   - name: data-governance-freshness
     orgId: 1
-    folder: data-governance
+    folder: Data Governance Alerts
     interval: 1m
     rules:
       - uid: cdc_freshness_10min_slo

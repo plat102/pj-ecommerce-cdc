@@ -1,7 +1,12 @@
 apiVersion: 1
 
+# Two providers so business dashboards and observability dashboards land in
+# separate folders in the Grafana UI. Alert-rule folders (data-governance,
+# observability) are managed by alerting/*.yml and only contain rules — the
+# dashboard folders declared here own the dashboards themselves.
+
 providers:
-  - name: 'ecommerce-dashboards'
+  - name: 'business-dashboards'
     orgId: 1
     folder: 'Ecommerce Analytics'
     type: file
@@ -9,4 +14,16 @@ providers:
     updateIntervalSeconds: 10
     allowUiUpdates: true
     options:
-      path: /etc/grafana/provisioning/dashboards/files
+      path: /etc/grafana/provisioning/dashboards/files/business
+      foldersFromFilesStructure: false
+
+  - name: 'observability-dashboards'
+    orgId: 1
+    folder: 'Observability'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/files/observability
+      foldersFromFilesStructure: false

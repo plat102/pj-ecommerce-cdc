@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Phases 1 (Foundation), 2 (Pipeline metrics), and 3 (Alerts + resilience) requirements are decomposed below. Phase 4 (OTEL migration path) remains a placeholder.
+> **Status:** All four phases are decomposed below. Phase 4 (OTEL Collector) is optional but shipped in this change to close the baseline dangling reference to `otel_logs` / `otel_traces` in the Grafana ClickHouse datasource.
 >
 > **Decomposition status:**
 >
@@ -11,7 +11,7 @@
 > | `grafana-observability-datasources` | Yes (Phase 1, spans Pillars 1+2) | `grafana-observability-datasources` |
 > | `alerting-and-notification` | Yes (Phase 3) | `infrastructure-alert-rules`, `alert-contact-point-webhook` |
 > | `service-resilience` | Yes (Phase 3) | `service-restart-policies`, `service-healthchecks` |
-> | `otel-migration-path` (optional Phase 4) | Not yet | `otel-collector-pipeline`, `otlp-ingestion-endpoint` |
+> | `otel-migration-path` | Yes (Phase 4) | `otel-collector-pipeline`, `otlp-ingestion-endpoint` |
 
 **Phase 1 — Foundation (decomposed from `log-aggregation` and `metrics-collection` for the container/host portion).**
 
@@ -154,3 +154,32 @@ Services with a well-defined readiness check SHALL declare a `healthcheck:` bloc
 #### Scenario: all core services report healthy after startup
 - **WHEN** `make status` is run 90 seconds after `make up`
 - **THEN** every service with a declared healthcheck SHALL show `(healthy)` in its status column
+
+**Phase 4 — OTEL Collector unified ingress (decomposed from `otel-migration-path`, optional).**
+
+### Requirement: otel-collector-pipeline
+An `otel/opentelemetry-collector-contrib:0.109.0` container SHALL run alongside Alloy in `docker-compose.observability.yml`. Its config at `infrastructure/docker/otel/collector-config.yaml` SHALL define pipelines that: (a) accept OTLP over gRPC (:4317) and HTTP (:4318); (b) tail Docker container logs via the `filelog` receiver (parallel to Alloy — Loki dedupes); (c) export logs to Loki and to a ClickHouse `otel_logs` table; (d) export traces to a ClickHouse `otel_traces` table (plus its `otel_traces_trace_id_ts` index and materialized view). This closes the baseline dangling reference to `otel_logs` / `otel_traces` in the Grafana ClickHouse datasource.
+
+#### Scenario: collector self-metrics available
+- **WHEN** `curl http://localhost:8889/metrics` is executed after startup
+- **THEN** the response SHALL include `otelcol_exporter_queue_capacity` series for both the `loki` and `clickhouse` exporters
+
+#### Scenario: OTLP payload lands in ClickHouse
+- **WHEN** a POST is sent to `http://localhost:4318/v1/logs` with a well-formed OTLP-JSON body
+- **THEN** the OTEL Collector SHALL return HTTP 200 with `{"partialSuccess":{}}`
+- **AND** within 10 seconds a row SHALL appear in the `ecommerce_analytics.otel_logs` table with the payload's body text
+
+#### Scenario: OTLP payload lands in Loki
+- **WHEN** OTLP logs are ingested via the collector
+- **THEN** a Loki query `{exporter="OTLP"}` SHALL return the same log lines shortly after ingestion, providing dual-write redundancy alongside Alloy
+
+### Requirement: otlp-ingestion-endpoint
+The OTEL Collector SHALL expose OTLP gRPC on `:4317` and OTLP HTTP on `:4318`. Both endpoints SHALL be bound to `0.0.0.0` inside the container and mapped to the same host ports. No authentication SHALL be enforced (local dev only). Applications instrumenting with the OpenTelemetry SDK SHALL point their exporter at `http://otel-collector:4318` (in-network) or `http://localhost:4318` (host-side) without additional configuration.
+
+#### Scenario: gRPC endpoint reachable
+- **WHEN** the observability stack is up
+- **THEN** the OTEL Collector SHALL be listening on host port 4317 as reported by `docker port otel-collector`
+
+#### Scenario: HTTP endpoint accepts empty payload
+- **WHEN** `curl -X POST -H 'Content-Type: application/json' -d '{"resourceLogs":[]}' http://localhost:4318/v1/logs` is executed
+- **THEN** the response SHALL be HTTP 200 with body containing `partialSuccess`

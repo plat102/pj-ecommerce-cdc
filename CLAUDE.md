@@ -114,3 +114,4 @@ ClickHouse target tables use `ReplacingMergeTree` keyed on `_version` (sourced f
 - cAdvisor (container metrics UI): http://localhost:8082
 - node-exporter (host metrics scrape endpoint): http://localhost:9100/metrics
 - Alloy UI (log shipper debug): http://localhost:12345
+- OTEL Collector self-metrics: http://localhost:8889/metrics — OTLP endpoints: gRPC :4317, HTTP :4318

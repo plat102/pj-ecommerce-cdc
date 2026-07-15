@@ -160,6 +160,40 @@ services:
     networks:
       - ecommerce-network
 
+  # ---------------------------------------------------------------------
+  # Phase 4 — OTEL Collector (unified ingress, optional migration path)
+  # ---------------------------------------------------------------------
+  # Runs alongside Alloy (both write to Loki; Loki dedupes). Also populates
+  # the existing otel_logs / otel_traces ClickHouse tables that the Grafana
+  # ClickHouse datasource has been referencing since the baseline. When
+  # ready to migrate off Alloy, disable alloy in this compose file and the
+  # OTEL filelog receiver becomes the sole log ingest path.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: otel-collector
+    restart: on-failure:3
+    depends_on:
+      loki:
+        condition: service_healthy
+      # clickhouse is defined in docker-compose.analytics.yml — depends_on
+      # cannot reference it from a sibling compose file. Retry-on-failure
+      # in the exporter handles the case where ClickHouse is not yet up.
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # collector telemetry (self-metrics)
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ecommerce_analytics}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse123}
+    command: ["--config=/etc/otel/collector-config.yaml"]
+    volumes:
+      - ./otel/collector-config.yaml:/etc/otel/collector-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - ecommerce-network
+
 volumes:
   loki_data:
   prometheus_data:
