@@ -64,7 +64,7 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Run `openspec validate --changes --specs` and ensure all checks pass.
-- [ ] 5.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks (`openspec archive` does this automatically).
-- [ ] 5.3 Merge `specs/observability/spec.md` into a new `openspec/specs/observability/spec.md`, decomposing the 5 broad placeholder requirements into the 12-14 phase-scoped requirements listed in `design.md` § "Requirements That Will Be Declared". Remove placeholders in change dir before archive so only phase-scoped requirements land in main spec (mirrors `add-data-governance` archive pattern).
-- [ ] 5.4 Move `openspec/changes/add-infra-observability/` to `openspec/changes/archive/YYYY-MM-DD-add-infra-observability/` (`openspec archive` handles this).
+- [x] 5.1 Run `openspec validate --changes --specs` and ensure all checks pass (7/7 items valid: change + 6 specs).
+- [x] 5.2 Merge each `specs/<capability>/spec.md` file from this change dir into the corresponding `openspec/specs/<capability>/spec.md`, applying `## MODIFIED Requirements` sections into the existing requirement blocks (done by `openspec archive`: analytics ~1, cdc-pipeline ~2, data-governance ~1, infrastructure ~4).
+- [x] 5.3 Merge `specs/observability/spec.md` into a new `openspec/specs/observability/spec.md`, decomposing all placeholders into 14 phase-scoped requirements (done by `openspec archive`: 14 requirements added to a newly-created `openspec/specs/observability/spec.md`; the 6 placeholders were pre-decomposed inside the change dir before archive so only phase-scoped requirements land in main spec).
+- [x] 5.4 Move `openspec/changes/add-infra-observability/` to `openspec/changes/archive/2026-07-15-add-infra-observability/` (done automatically by `openspec archive`).

@@ -3,7 +3,7 @@
 End-to-end change data capture from PostgreSQL through Debezium and Kafka into PySpark Structured Streaming jobs that land deduplicated rows in ClickHouse. Covers connector configuration, Kafka topic conventions, and the Spark job model (base class, debug vs production sinks, decimal decoding).
 ## Requirements
 ### Requirement: debezium-connector-registration
-The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Connect REST API using the configuration in `data-platform/cdc/connectors/register-pg.json`. The connector name SHALL be `pg-connector-ecommerce`. The connector configuration SHALL use `io.apicurio.registry.utils.converter.AvroConverter` for both key and value, with `apicurio.registry.url = http://schema-registry:8080/apis/registry/v2`. The Debezium container SHALL run with `ENABLE_APICURIO_CONVERTERS=true` so the bundled Apicurio converter is on the plugin path.
+The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Connect REST API using the configuration in `data-platform/cdc/connectors/register-pg.json`. The connector name SHALL be `pg-connector-ecommerce`. The connector configuration SHALL use `io.apicurio.registry.utils.converter.AvroConverter` for both key and value, with `apicurio.registry.url = http://schema-registry:8080/apis/registry/v2`. The Debezium container SHALL run with `ENABLE_APICURIO_CONVERTERS=true` so the bundled Apicurio converter is on the plugin path. The Debezium container SHALL additionally run with the jmx-exporter javaagent enabled via `KAFKA_OPTS=-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=5556:/opt/jmx-exporter/debezium-jmx.yml` so connector metrics are exposed at `http://debezium:5556/metrics` for Prometheus scraping.
 
 #### Scenario: successful connector registration
 - **WHEN** the stack is running and `make apply-pg-connector` is executed
@@ -17,6 +17,10 @@ The Debezium PostgreSQL connector SHALL be registered via POST to the Kafka Conn
 - **WHEN** `data-platform/cdc/connectors/register-pg.json` is inspected
 - **THEN** `config.key.converter` and `config.value.converter` SHALL both be `io.apicurio.registry.utils.converter.AvroConverter`
 - **AND** `config.key.converter.apicurio.registry.url` and `config.value.converter.apicurio.registry.url` SHALL both be `http://schema-registry:8080/apis/registry/v2`
+
+#### Scenario: jmx-exporter agent metrics reachable
+- **WHEN** the Debezium container has been running for at least 30 seconds
+- **THEN** `curl http://localhost:5556/metrics` SHALL return a Prometheus-formatted response containing at minimum `kafka_connect_connector_status` and `debezium_metrics_MilliSecondsSinceLastEvent`
 
 ---
 
@@ -82,7 +86,7 @@ When launched with `--debug`, a Spark job SHALL write transformed rows to the co
 ---
 
 ### Requirement: production-mode
-When launched without `--debug`, a Spark job SHALL write transformed DataFrames to ClickHouse via `foreachBatch` using the JDBC ClickHouse driver. A checkpoint SHALL be maintained at `{CHECKPOINT_LOCATION}/{table_name}/v1` (see `checkpoint-versioned-paths`). When `ENABLE_GX_GATE=1`, the `foreachBatch` function SHALL wrap the ClickHouse writer with a Great Expectations gate that routes invalid rows to `{table}_dlq` before delegating valid rows to the ClickHouse write (see `gx-batch-validation` and `dlq-on-validation-failure`).
+When launched without `--debug`, a Spark job SHALL write transformed DataFrames to ClickHouse via `foreachBatch` using the JDBC ClickHouse driver. A checkpoint SHALL be maintained at `{CHECKPOINT_LOCATION}/{table_name}/v1` (see `checkpoint-versioned-paths`). When `ENABLE_GX_GATE=1`, the `foreachBatch` function SHALL wrap the ClickHouse writer with a Great Expectations gate that routes invalid rows to `{table}_dlq` before delegating valid rows to the ClickHouse write (see `gx-batch-validation` and `dlq-on-validation-failure`). The Spark job SHALL enable the built-in Prometheus servlet via `--conf spark.ui.prometheus.enabled=true --conf spark.metrics.conf=/home/jupyter/spark-conf/metrics.properties` so streaming and executor metrics are exposed at `http://ed-pyspark-jupyter:4040/metrics/prometheus` for Prometheus scraping.
 
 #### Scenario: data reaches ClickHouse
 - **WHEN** a Postgres row is inserted and all three prod-mode jobs are running
@@ -95,6 +99,10 @@ When launched without `--debug`, a Spark job SHALL write transformed DataFrames 
 #### Scenario: GX gate disabled by default
 - **WHEN** a Spark CDC job starts without `ENABLE_GX_GATE` set
 - **THEN** `create_batch_writer_function` SHALL return the unwrapped writer and no `_dlq` topic writes SHALL occur
+
+#### Scenario: Prometheus servlet exposes streaming metrics
+- **WHEN** a Spark CDC job has been running in prod mode for at least 30 seconds
+- **THEN** `curl http://localhost:4040/metrics/prometheus` SHALL return a Prometheus-formatted response containing at minimum `spark_streaming_query_lastCompletedBatchId` and `spark_streaming_query_inputRate`
 
 ### Requirement: decimal-decoding
 Any Spark transformer handling a PostgreSQL `DECIMAL` or `NUMERIC` column SHALL apply `decode_decimal_udf` (defined in `src/utils/udfs.py`) to convert Debezium's base64-encoded byte representation to a Spark `DecimalType`.

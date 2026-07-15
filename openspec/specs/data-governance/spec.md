@@ -134,7 +134,7 @@ Rows that fail any column-level expectation SHALL be routed to a `{table}_dlq` K
 - **THEN** the nine passing rows SHALL be written to `orders_cdc` and the one failing row SHALL be written to `orders_dlq`
 
 ### Requirement: freshness-slo-and-alert
-The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that fires when any target table has `minutes_since_last_update > 10`. The alert rule SHALL be provisioned via `infrastructure/docker/grafana/provisioning/alerting/data_freshness.yml` (not hand-configured in the Grafana UI).
+The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that fires when any target table has `minutes_since_last_update > 10`. The alert rule SHALL be provisioned via `infrastructure/docker/grafana/provisioning/alerting/data_freshness.yml` (not hand-configured in the Grafana UI). The rule SHALL reference the default contact point provisioned by observability Phase 3 so notifications reach an external channel (webhook / Slack) rather than terminating in the Grafana UI.
 
 #### Scenario: alert rule provisioned
 - **WHEN** Grafana boots with the alerting provisioning file present
@@ -145,9 +145,9 @@ The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that
 - **WHEN** Spark CDC jobs are stopped and no new events reach ClickHouse for > 10 minutes
 - **THEN** the `cdc_freshness_10min_slo` rule SHALL enter the `Alerting` state after its 2-minute confirmation window
 
----
-
-**Phase 4 — Metadata & Lineage Catalog (decomposed from `lineage-emission`).** The three requirements below are the phase-scoped decomposition for Phase 4 (Pillar 2).
+#### Scenario: freshness alert routes to default contact point
+- **WHEN** the `cdc_freshness_10min_slo` rule enters the `Alerting` state
+- **THEN** a notification SHALL be posted to the default contact point (webhook or Slack) provisioned by observability Phase 3 from `OBS_ALERT_WEBHOOK_URL` / `OBS_SLACK_WEBHOOK_URL` env vars
 
 ### Requirement: openmetadata-ingestion
 The project SHALL ship OpenMetadata ingestion configuration files for each system in the CDC pipeline it owns as a data producer or consumer: PostgreSQL source, Kafka + Schema Registry, and ClickHouse sink. Each config SHALL live under `data-platform/governance/openmetadata/ingestion/{postgres,kafka,clickhouse}.yaml` and be runnable via `metadata ingest -c <path>`.
