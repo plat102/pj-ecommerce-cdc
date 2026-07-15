@@ -5,14 +5,18 @@ kafka:
   # Brokers is a list of bootstrap servers with ports.
   brokers:
     - kafka1:9092
-    
+
   #----------------------------------------------------------------------------
   # Schema Registry configuration (top-level)
+  #
+  # Apicurio Registry exposes a Confluent-compatible endpoint at
+  # /apis/ccompat/v7 — Redpanda Console uses the Confluent shape natively.
+  # In-network port is 8080 (host-mapped to 8081 in docker-compose.kafka.yml).
   #----------------------------------------------------------------------------
   schemaRegistry:
-    enabled: false # Set to true if want to use Schema Registry
+    enabled: true
     urls:
-      - http://schema-registry:8081
+      - http://schema-registry:8080/apis/ccompat/v7
 
 #----------------------------------------------------------------------------
 # Server settings
