@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Phases 1–3 requirements are decomposed below. Phase 4 remains a broad placeholder.
+> **Status:** All four phases decomposed.
 >
 > **Decomposition status:**
 >
@@ -9,7 +9,7 @@
 > | `kafka-connect-error-handling` | Yes (Phase 1) | `kafka-connect-dlq-config`, `kafka-connect-dlq-topic` |
 > | `spark-sink-dlq` | Yes (Phase 2) | `spark-sink-dlq-wrapper`, `spark-sink-dlq-envelope`, `spark-sink-dlq-opt-in`, `dlq-envelope-shared` |
 > | `dlq-observability` | Yes (Phase 3) | `central-dlq-dashboard`, `dlq-traffic-alert-rule` |
-> | `dlq-triage-ui` | Not yet | `streamlit-dlq-triage-view` |
+> | `dlq-triage-ui` | Yes (Phase 4) | `streamlit-dlq-triage-view` |
 
 **Phase 1 — Kafka Connect DLQ (decomposed from `kafka-connect-error-handling`).**
 
@@ -99,9 +99,21 @@ An alert rule `dlq_traffic_present` SHALL be provisioned in `infrastructure/dock
 - **WHEN** the Grafana Alerting page (`http://localhost:3000/alerting/list`) is opened after startup
 - **THEN** the `Observability Alerts` folder SHALL contain `dlq_traffic_present` alongside the five rules provisioned by `add-infra-observability`
 
-### Requirement: dlq-triage-ui
-The Streamlit UI SHALL provide a read-only DLQ triage view listing recent contents from all DLQ topics, with each row showing at minimum: source DLQ topic, error stage, error class, truncated error message, message key, first-seen timestamp, and expandable full payload.
+**Phase 4 — DLQ triage UI (decomposed from `dlq-triage-ui`).**
 
-#### Scenario: developer inspects a DLQ row
-- **WHEN** a developer opens the Streamlit "DLQ Triage" view after DLQ traffic exists
-- **THEN** the page SHALL list the recent DLQ messages across every `*_dlq` topic (Kafka Connect + Spark GX + Spark sink) in a single table
+### Requirement: streamlit-dlq-triage-view
+The Streamlit UI SHALL provide a read-only DLQ triage view under `application/cdc-testing-ui/views/dlq_triage.py`, registered in `app.py` and reachable from the sidebar menu label `"🚨 DLQ Triage"`. The view SHALL consume from the fixed set of DLQ topics `debezium_connect_dlq`, `{customers,products,orders}_dlq`, and `{customers,products,orders}_sink_dlq` via `managers.kafka.KafkaManager.consume_messages` and render each message as a row with columns `dlq_topic`, `_error_stage`, `_error_class`, `_error_message` (truncated to 80 characters), `key`, `first_seen`. Each row SHALL have an expander that shows the full JSON payload. The row-construction logic SHALL live in a pure function `build_triage_rows(messages)` so it can be unit-tested without a running Streamlit runtime.
+
+#### Scenario: developer inspects DLQ contents
+- **WHEN** a developer opens the DLQ Triage view after DLQ traffic exists
+- **THEN** the page SHALL list the recent DLQ messages across every `*_dlq` topic in a single sortable table
+- **AND** clicking a row's expander SHALL reveal the full JSON payload
+
+#### Scenario: empty state renders gracefully
+- **WHEN** no DLQ traffic has occurred within the selected time window
+- **THEN** the page SHALL render an informational empty-state message explaining that steady-state has no DLQ traffic, and SHALL NOT throw or hang
+
+#### Scenario: Kafka Connect raw bytes tolerated
+- **WHEN** a `debezium_connect_dlq` message contains a raw non-JSON payload (the record that failed the converter)
+- **THEN** `build_triage_rows` SHALL surface a `_raw` fallback field inside the payload and MUST NOT raise
+- **AND** the row SHALL display `_error_stage="unknown"` since Kafka Connect's DLQ envelope is header-based rather than value-based

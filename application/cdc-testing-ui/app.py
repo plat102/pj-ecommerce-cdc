@@ -16,6 +16,7 @@ from views.products import show_products_page
 from views.orders import show_orders_page
 from views.kafka_monitor import show_kafka_monitor
 from views.batch_testing import show_batch_testing
+from views.dlq_triage import show_dlq_triage
 
 # Page config
 st.set_page_config(**STREAMLIT_CONFIG)
@@ -45,6 +46,8 @@ def main():
         show_kafka_monitor()
     elif page == "🧪 Batch Testing":
         show_batch_testing()
+    elif page == "🚨 DLQ Triage":
+        show_dlq_triage()
 
 
 if __name__ == "__main__":

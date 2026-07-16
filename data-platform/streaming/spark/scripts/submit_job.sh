@@ -14,7 +14,7 @@ REPOSITORIES="https://packages.confluent.io/maven/"
 # environments without a lineage collector are unaffected. When enabled,
 # emits START/COMPLETE/FAIL events to OpenMetadata's OpenLineage endpoint
 # (namespace `ecommerce-cdc-spark`, one job per --job-type).
-OPENLINEAGE_CONFS=""
+OPENLINEAGE_CONFS=()
 if [[ "${ENABLE_OPENLINEAGE:-0}" == "1" ]]; then
     OPENLINEAGE_URL="${OPENLINEAGE_URL:-http://openmetadata-server:8585/api/v1/openlineage}"
     OPENLINEAGE_NAMESPACE="${OPENLINEAGE_NAMESPACE:-ecommerce-cdc-spark}"
