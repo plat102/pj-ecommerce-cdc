@@ -1,189 +1,110 @@
-# Analytics Platform
+# Analytics
 
-Real-time analytics platform for ecommerce CDC data using ClickHouse and Grafana.
+Real-time analytics surface built on top of the CDC pipeline: **ClickHouse** as the OLAP store, **Grafana** as the visualization + alerting layer.
 
-## Architecture Overview
+Prerequisite reading: [`architecture.md`](architecture.md) covers the pipeline plumbing (Postgres → Debezium → Kafka → Spark → ClickHouse). This doc picks up at "row has landed in ClickHouse; now what?".
 
-```
-PostgreSQL → Debezium → Kafka → Spark → ClickHouse → Grafana
-                                          ↗️ Views      ↗️ Dashboards
-```
+## Deduplication model
 
-### Components
+Every CDC target table (`customers_cdc`, `products_cdc`, `orders_cdc`) uses the `ReplacingMergeTree(_version)` engine ordered by the primary key `id`, with two extra columns:
 
-- **ClickHouse**: OLAP database for fast analytics queries
-- **Grafana**: Visualization and dashboards
-- **Analytics Views**: Pre-computed business metrics
+- `_version` (`UInt64`) — Debezium `ts_ms`; the newest event wins.
+- `_deleted` (`UInt8`) — set to 1 when the Debezium `op = "d"`.
 
-### Auto-refresh Mechanism
-```txt
-Grafana Dashboard──┐
-                   │ (query every 30s)
-                   ↓
-ClickHouse Views ──┐
-                   │ (computed on-demand)
-                   ↓
-Raw CDC Tables ────┐
-                   │ (updated real-time)
-                   ↓
-Spark Streaming ───┐
-                   │ (process CDC events)
-                   ↓
-Kafka Topics ──────● (real-time stream)
-```
+Any query that needs the current state uses the `FINAL` modifier and filters `_deleted = 0`:
 
-## Features Summary
-
-### 📊 Business Metrics
-- Daily/monthly sales trends
-- Customer insights and VIP analysis
-- Product performance tracking
-- Real-time activity monitoring
-
-### ⚡ Real-time Updates
-- Auto-refresh dashboards (30s-1m)
-- CDC pipeline ensures data freshness
-- Low latency analytics (seconds)
-
-### 🎯 Key Dashboards
-- **Executive Dashboard**: Business overview and KPIs
-- **Customer Insights**: Customer behavior and segmentation
-
-## Quick Start
-
-### Setup
-```bash
-# Start analytics services
-./scripts/setup_simple_analytics.sh
-```
-
-### Access
-- **Grafana**: http://localhost:3000 (admin/admin123)
-- **ClickHouse**: http://localhost:8123
-
-### Import Dashboards
-1. Open Grafana → Import
-2. Upload: `data-platform/dashboards/grafana/executive-dashboard.json`
-3. Upload: `data-platform/dashboards/grafana/customer-insights.json`
-
-## Analytics Views
-
-### Sales Analytics
 ```sql
-daily_sales_summary    -- Daily orders, items, customers
-monthly_sales_summary  -- Monthly trends
-hourly_orders_trend    -- Hourly patterns (last 24h)
+SELECT * FROM ecommerce_analytics.customers_cdc FINAL WHERE _deleted = 0;
 ```
 
-### Customer Analytics
+Merges are asynchronous, so queries without `FINAL` may return duplicates. TTL clauses drop tombstones after 90 days and any row after 2 years — see [`governance.md`](governance.md#retention--ttl).
+
+DDL: `infrastructure/docker/clickhouse/create_tables.sql`.
+
+## Grafana datasources
+
+Three provisioned datasources:
+
+| Datasource | Points at | `editable` | Purpose |
+|---|---|---|---|
+| `ClickHouse-Analytics` | `http://clickhouse:8123` | `true` | Business data — used by all analytics dashboards. Connects as `analyst_readonly` (row policy filters tombstones automatically). |
+| `Loki` | `http://loki:3100` | `false` | Container logs (via Grafana Explore) |
+| `Prometheus` | `http://prometheus:9090` | `false` | Pipeline + host metrics |
+
+The ClickHouse datasource is left editable so analysts can tweak query settings; observability datasources are locked to prevent UI-side drift from the provisioned config.
+
+Files: `infrastructure/docker/grafana/provisioning/datasources/`.
+
+## Provisioned dashboards
+
+Sourced from `data-platform/dashboards/grafana/`, synced into Grafana by `make sync-dashboards` (calls `scripts/sync_dashboards.sh`):
+
+- `executive-dashboard.json` — business overview and KPIs
+- `customer-insights.json` — customer behavior and segmentation
+- `test-dashboard.json` — reserved for ad-hoc panels
+
+Add a new dashboard by dropping its JSON into `data-platform/dashboards/grafana/` and running `make reload-grafana` (sync + restart Grafana container).
+
+## Analytics views
+
+Defined in `data-platform/dashboards/clickhouse/analytics_views.sql`.
+
+**Sales**
 ```sql
-customer_metrics       -- Per-customer metrics
-top_customers_by_orders -- Top 50 VIP customers
+daily_sales_summary     -- daily orders, items, customers
+monthly_sales_summary   -- monthly trends
+hourly_orders_trend     -- hourly patterns, last 24 h
 ```
 
-### Product Analytics
+**Customer**
 ```sql
-product_performance    -- Product performance metrics
-top_selling_products   -- Top 20 best sellers
+customer_metrics             -- per-customer metrics
+top_customers_by_orders      -- top 50 VIP customers
 ```
 
-### System Monitoring
+**Product**
 ```sql
-recent_activity        -- Last 24h activity
-data_freshness         -- CDC data lag monitoring
+product_performance   -- performance metrics per product
+top_selling_products  -- top 20 best sellers
 ```
 
-## Data Flow
-
-### Real-time Pipeline
-1. **Source**: PostgreSQL database changes
-2. **Capture**: Debezium CDC events → Kafka
-3. **Process**: Spark Streaming → ClickHouse
-4. **Analyze**: ClickHouse views compute metrics
-5. **Visualize**: Grafana dashboards display results
-
-### Example: New Order
-```
-🛒 Order Created → CDC Event → Kafka → Spark → ClickHouse → Grafana Update
-                                                    ↓
-                                            Views Recalculated
+**System monitoring**
+```sql
+recent_activity   -- last-24 h activity
+data_freshness    -- CDC lag, drives cdc_freshness_10min_slo alert
 ```
 
-```txt
-🛒 New Order Created:
-└── PostgreSQL INSERT
-    └── Debezium captures change
-        └── Kafka receives CDC event
-            └── Spark processes & writes to ClickHouse
-                └── Views auto-update calculations
-                    └── Grafana shows new metrics (next refresh)
+Redeploy after edits:
+```sh
+docker exec -i clickhouse clickhouse-client < data-platform/dashboards/clickhouse/analytics_views.sql
 ```
 
-## File Structure
+## Auto-refresh chain
 
 ```
-data-platform/dashboards/
-├── clickhouse/
-│   └── analytics_views.sql      # ClickHouse views
-└── grafana/
-    ├── executive-dashboard.json # Main business dashboard
-    └── customer-insights.json   # Customer analytics
+Grafana dashboard
+  | (query every 30s)
+  v
+ClickHouse view  (computed on demand)
+  | 
+  v
+*_cdc tables  (updated by Spark micro-batches)
+  |
+  v
+Spark Structured Streaming  (Kafka -> ClickHouse)
+  |
+  v
+Kafka topic  pg.public.{table}
 ```
 
-## Operations Guide
-### Configuration
+## Access
 
-#### ClickHouse
-- Database: `ecommerce_analytics`
-- HTTP Port: 8123
-- Native Port: 9000
+- Grafana — http://localhost:3000, login `admin` / `<GRAFANA_ADMIN_PASSWORD>` (from `infrastructure/docker/.env`).
+- ClickHouse HTTP — http://localhost:8123. Interactive: `make clickhouse-client`.
 
-#### Grafana
-- Auto-configured ClickHouse datasource
-- Pre-built dashboards
-- Real-time refresh
+## Troubleshooting
 
-### Extending Analytics
-
-#### Adding New Views
-1. Edit `analytics_views.sql`
-2. Create view with business logic
-3. Deploy: `docker exec -i clickhouse clickhouse-client < analytics_views.sql`
-
-#### Creating Dashboards
-1. Build queries in ClickHouse
-2. Create panels in Grafana
-3. Export JSON for version control
-
-### Troubleshooting
-
-#### Common Issues
-- **No data**: Check CDC pipeline and Spark jobs
-- **Stale data**: Verify data_freshness view
-- **Slow queries**: Review ClickHouse query logs
-
-## Performance
-
-### Optimizations
-- ClickHouse ReplacingMergeTree for CDC deduplication
-- Materialized views for heavy computations
-- Efficient time-based partitioning
-
-### Monitoring
-- Data freshness tracking
-- Query performance metrics
-- Dashboard usage analytics
-
-
-### Useful Commands
-```bash
-# Check ClickHouse
-docker exec -it clickhouse clickhouse-client
-
-# Test analytics views
-USE ecommerce_analytics;
-SELECT * FROM daily_sales_summary LIMIT 5;
-
-# View logs
-docker-compose -f docker-compose.analytics.yml logs
-```
+- **No data**: check the CDC pipeline (`make check-connector`, `make cdc-status`).
+- **Stale data**: query the `data_freshness` view; the `cdc_freshness_10min_slo` alert fires when lag exceeds threshold.
+- **Slow queries**: inspect ClickHouse query logs (`SELECT * FROM system.query_log ORDER BY event_time DESC LIMIT 20`).
+- **Dashboard shows tombstones**: dashboards must use `FINAL WHERE _deleted = 0` (the `analyst_readonly` row policy also strips tombstones).
