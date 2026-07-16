@@ -29,11 +29,11 @@
 
 ## 3. Phase 3 — DLQ observability
 
-- [ ] 3.1 Add `infrastructure/docker/grafana/provisioning/dashboards/files/observability/central-dlq.json` — 3 panels: (a) DLQ message rate per topic via kafka-exporter `sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m]))`, (b) total DLQ counts as bar chart, (c) latest DLQ producer log lines from Loki filtered on `{container=~"debezium|ed-pyspark-jupyter"} |~ "DLQ"`.
-- [ ] 3.2 Append `dlq_traffic_present` alert rule to `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml`: condition `sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m])) > 0`, `for: 1m`, warning severity, routes to default-webhook contact point.
-- [ ] 3.3 Verify: dashboard renders in Grafana under `Observability` folder. Force a bad record → within 1 minute `Observability Alerts` folder shows `dlq_traffic_present` in Firing state; webhook.site inbox (if `OBS_ALERT_WEBHOOK_URL` is set to a real URL) receives POST.
-- [ ] 3.4 Update `specs/error-handling/spec.md` — add `## ADDED Requirements` for `central-dlq-dashboard`, `dlq-traffic-alert-rule`.
-- [ ] 3.5 Update `specs/observability/spec.md` in change dir — extend `infrastructure-alert-rules` scenario to include `dlq_traffic_present` in the minimum rule set.
+- [x] 3.1 Add `infrastructure/docker/grafana/provisioning/dashboards/files/observability/central-dlq.json` — 4 panels: (a) DLQ message rate per topic via kafka-exporter `sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m]))`, (b) total DLQ offsets as bar-gauge, (c) stat panel counting distinct DLQ topics present, (d) latest DLQ log lines from Loki filtered on `{container=~"debezium|ed-pyspark-jupyter"} |~ "(?i)DLQ|dead[- ]letter"`.
+- [x] 3.2 Append `dlq_traffic_present` alert rule to `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml`: condition `sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m])) > 0`, `for: 1m`, warning severity, routes to default-webhook via the root notification policy.
+- [ ] 3.3 Verify: dashboard renders in Grafana under `Observability` folder. Force a bad record → within 1 minute `Observability Alerts` folder shows `dlq_traffic_present` in Firing state; webhook.site inbox (if `OBS_ALERT_WEBHOOK_URL` is set to a real URL) receives POST. **Deferred** — requires full stack + forced bad record; provisioning contract exercised on next `make up`.
+- [x] 3.4 Update `specs/error-handling/spec.md` — decompose `dlq-observability` placeholder into `central-dlq-dashboard`, `dlq-traffic-alert-rule`.
+- [x] 3.5 Update `specs/observability/spec.md` in change dir — extend `infrastructure-alert-rules` scenario to include `dlq_traffic_present` in the minimum rule set (already covered in Phase 0 draft; matches implementation).
 
 ## 4. Phase 4 — Streamlit DLQ triage view
 

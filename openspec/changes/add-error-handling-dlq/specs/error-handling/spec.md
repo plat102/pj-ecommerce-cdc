@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-> **Status:** Phases 1–2 requirements are decomposed below. Phases 3/4 remain broad placeholders.
+> **Status:** Phases 1–3 requirements are decomposed below. Phase 4 remains a broad placeholder.
 >
 > **Decomposition status:**
 >
@@ -8,7 +8,7 @@
 > |---|---|---|
 > | `kafka-connect-error-handling` | Yes (Phase 1) | `kafka-connect-dlq-config`, `kafka-connect-dlq-topic` |
 > | `spark-sink-dlq` | Yes (Phase 2) | `spark-sink-dlq-wrapper`, `spark-sink-dlq-envelope`, `spark-sink-dlq-opt-in`, `dlq-envelope-shared` |
-> | `dlq-observability` | Not yet | `central-dlq-dashboard`, `dlq-traffic-alert-rule` |
+> | `dlq-observability` | Yes (Phase 3) | `central-dlq-dashboard`, `dlq-traffic-alert-rule` |
 > | `dlq-triage-ui` | Not yet | `streamlit-dlq-triage-view` |
 
 **Phase 1 — Kafka Connect DLQ (decomposed from `kafka-connect-error-handling`).**
@@ -77,16 +77,27 @@ The sink DLQ wrapping SHALL be opt-in via the `ENABLE_SINK_DLQ=1` environment va
 - **THEN** `create_batch_writer_function` SHALL return the raw ClickHouse writer with no wrappers
 - **AND** a sink exception SHALL propagate and terminate the streaming query as before
 
-### Requirement: dlq-observability
-DLQ traffic across all `*_dlq` topics SHALL be surfaced in Grafana via both a dedicated dashboard and an alert rule that fires the moment any DLQ receives its first message within a 5-minute window.
+**Phase 3 — DLQ observability (decomposed from `dlq-observability`).**
 
-#### Scenario: dashboard renders DLQ traffic
-- **WHEN** the "Central DLQ" dashboard is opened in Grafana's Observability folder
-- **THEN** it SHALL show per-topic message rate for all `*_dlq` topics via kafka-exporter metrics
+### Requirement: central-dlq-dashboard
+A Grafana dashboard `Central DLQ` (uid `central-dlq`) SHALL be provisioned under `infrastructure/docker/grafana/provisioning/dashboards/files/observability/central-dlq.json` and rendered in the `Observability` folder. The dashboard SHALL include at minimum: (a) a time-series panel showing `sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m]))`, (b) a per-topic total offset bar-gauge, (c) a stat panel counting the number of distinct DLQ topics currently present, and (d) a Loki logs panel filtered on `{container=~"debezium|ed-pyspark-jupyter"} |~ "(?i)DLQ|dead[- ]letter"`.
+
+#### Scenario: dashboard renders
+- **WHEN** the `Central DLQ` dashboard is opened in Grafana under the `Observability` folder
+- **THEN** all four panels SHALL be present and populated once the corresponding data sources have data
+- **AND** the dashboard uid SHALL be `central-dlq`
+
+### Requirement: dlq-traffic-alert-rule
+An alert rule `dlq_traffic_present` SHALL be provisioned in `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml` alongside the existing infra alerts. The rule SHALL fire when `sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m])) > 0` sustains for a `for: 1m` confirmation window, with `severity: warning` and `pillar: error-handling` labels. It SHALL route to the same `default-webhook` contact point as the other observability alerts via the root notification policy.
 
 #### Scenario: alert fires on DLQ traffic
 - **WHEN** any `*_dlq` topic receives its first message
-- **THEN** the `dlq_traffic_present` alert SHALL enter Firing state within its 1-minute confirmation window and route to the default-webhook contact point
+- **THEN** the `dlq_traffic_present` alert SHALL enter `Firing` state within its 1-minute confirmation window
+- **AND** the alert SHALL route to the `default-webhook` contact point provisioned by `alert-contact-point-webhook`
+
+#### Scenario: alert lives with sibling infra alerts
+- **WHEN** the Grafana Alerting page (`http://localhost:3000/alerting/list`) is opened after startup
+- **THEN** the `Observability Alerts` folder SHALL contain `dlq_traffic_present` alongside the five rules provisioned by `add-infra-observability`
 
 ### Requirement: dlq-triage-ui
 The Streamlit UI SHALL provide a read-only DLQ triage view listing recent contents from all DLQ topics, with each row showing at minimum: source DLQ topic, error stage, error class, truncated error message, message key, first-seen timestamp, and expandable full payload.

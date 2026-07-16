@@ -178,3 +178,38 @@ groups:
         labels:
           severity: critical
           pillar: infra-health
+
+      # ---------------------------------------------------------------
+      - uid: dlq_traffic_present
+        title: DLQ topic received traffic
+        condition: B
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: {from: 300, to: 0}
+            model:
+              expr: sum by (topic) (increase(kafka_topic_partition_current_offset{topic=~".+_dlq"}[5m]))
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {params: [0], type: gt}
+              refId: B
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: A DLQ topic received messages
+          description: |
+            One or more `*_dlq` topics received messages in the last 5
+            minutes — a record was quarantined by Kafka Connect, the GX
+            gate, or the Spark sink wrapper. Inspect the Central DLQ
+            dashboard and the Streamlit DLQ Triage view to find the
+            offending record and its error stage.
+        labels:
+          severity: warning
+          pillar: error-handling
