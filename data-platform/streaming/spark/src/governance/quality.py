@@ -87,41 +87,35 @@ def _validate_with_gx(batch_df: DataFrame, table: str) -> Tuple[DataFrame, DataF
     return valid, invalid
 
 
-def _write_dlq(invalid_df: DataFrame, table: str) -> None:
-    """Route invalid rows to `{table}_dlq` Kafka topic."""
-    if invalid_df.rdd.isEmpty():
-        return
-    kafka_servers = os.getenv("KAFKA_SERVERS", "kafka1:9092")
-    dlq_topic = f"{table}_dlq"
-    logger.warning(
-        "Routing %d invalid rows to %s", invalid_df.count(), dlq_topic
-    )
-    from pyspark.sql.functions import to_json, struct
-
-    (
-        invalid_df.select(
-            to_json(struct("*")).alias("value"),
-            lit(table).alias("key"),
-        )
-        .write.format("kafka")
-        .option("kafka.bootstrap.servers", kafka_servers)
-        .option("topic", dlq_topic)
-        .save()
-    )
-
-
 def with_gx_gate(inner_writer: Callable[[DataFrame, int], None], table: str) -> Callable[[DataFrame, int], None]:
     """Return a foreachBatch function that runs GX before delegating to
     `inner_writer`. Invalid rows go to `{table}_dlq` and are dropped from
     the ClickHouse write.
     """
+    from src.governance import dlq_producer
+
     def wrapped(batch_df: DataFrame, batch_id: int) -> None:
         if batch_df.isEmpty():
             inner_writer(batch_df, batch_id)
             return
         valid, invalid = _validate_with_gx(batch_df, table)
         if invalid.limit(1).count() > 0:
-            _write_dlq(invalid.drop("_failed_expectation"), table)
+            failing = (
+                invalid.select("_failed_expectation")
+                .limit(1)
+                .collect()[0]["_failed_expectation"]
+            )
+            failing_name = failing or "unknown"
+            dlq_producer.emit(
+                invalid.drop("_failed_expectation"),
+                topic=f"{table}_dlq",
+                error_stage="gx_validation",
+                extra_fields={
+                    "_error_class": "ExpectationFailure",
+                    "_error_message": failing_name,
+                    "_error_expectation": failing_name,
+                },
+            )
         inner_writer(valid, batch_id)
 
     return wrapped

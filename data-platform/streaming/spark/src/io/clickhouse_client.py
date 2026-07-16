@@ -68,16 +68,26 @@ class ClickHouseWriter:
         """
         Create a batch writer function for streaming.
 
-        When ENABLE_GX_GATE=1, wraps the writer with a Great Expectations
-        gate: invalid rows route to `{table_name}_dlq` before the
-        ClickHouse write. Default off so dev environments without GX
-        continue to work unchanged.
+        Optional wrappers, controlled by env vars:
+          - ENABLE_SINK_DLQ=1 -- wraps the ClickHouse write with a try/except
+            that routes failing batches to `{table_name}_sink_dlq`.
+          - ENABLE_GX_GATE=1  -- wraps the (already-possibly-DLQ'd) writer with
+            a Great Expectations gate that routes invalid rows to
+            `{table_name}_dlq` before the sink stage.
+
+        Composition when both are on:
+            with_gx_gate(with_sink_dlq(inner, table), table)
+        so invalid rows are filtered out before the sink layer ever sees them.
         """
         def write_batch_function(batch_df: DataFrame, batch_id: int):
             self.write_stream_batch(batch_df, batch_id, table_name)
 
         import os
+        writer = write_batch_function
+        if os.getenv("ENABLE_SINK_DLQ") == "1":
+            from src.governance.error_handling import with_sink_dlq
+            writer = with_sink_dlq(writer, table_name)
         if os.getenv("ENABLE_GX_GATE") == "1":
             from src.governance.quality import with_gx_gate
-            return with_gx_gate(write_batch_function, table_name)
-        return write_batch_function
+            writer = with_gx_gate(writer, table_name)
+        return writer
