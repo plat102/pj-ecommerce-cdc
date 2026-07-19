@@ -1,9 +1,7 @@
 ## Purpose
 
 Streamlit-based testing UI for driving and observing CDC events. Provides CRUD pages against the three Postgres source tables, a read-only Kafka monitor of Debezium envelopes, and a batch generator for throughput testing. Connection settings differ between Docker-network and host-local execution modes.
-
 ## Requirements
-
 ### Requirement: crud-customers
 The Streamlit UI SHALL allow users to INSERT, UPDATE, and DELETE rows in the PostgreSQL `customers` table via the Customers page (`views/customers.py`).
 
@@ -88,3 +86,16 @@ The UI SHALL cache Postgres and Kafka manager instances in Streamlit session sta
 #### Scenario: no reconnect on navigation
 - **WHEN** a user navigates between pages (e.g., Customers to Products)
 - **THEN** the existing DB and Kafka connections SHALL be reused without establishing new connections
+
+### Requirement: dlq-triage-view
+Streamlit SHALL provide a read-only DLQ Triage view at a top-level route (menu label "DLQ Triage") that lists recent messages across every DLQ topic in the stack: `debezium_connect_dlq`, `{customers,products,orders}_dlq` (GX validation), and `{customers,products,orders}_sink_dlq` (Spark sink). The view SHALL consume via the existing `managers/kafka.py::consume_messages` API and render a table with columns `dlq_topic`, `_error_stage`, `_error_class`, `_error_message` (truncated to 80 characters), `key`, `first_seen` (timestamp). Each row SHALL be expandable to reveal the full JSON payload.
+
+#### Scenario: developer inspects DLQ contents
+- **WHEN** a developer navigates to the DLQ Triage view in the Streamlit UI after DLQ traffic has occurred
+- **THEN** the page SHALL list at least the most-recent 100 DLQ messages across all DLQ topics in a sortable table
+- **AND** clicking a row SHALL expand a JSON view showing the full quarantined payload
+
+#### Scenario: empty state renders gracefully
+- **WHEN** no DLQ traffic has occurred in the last 5 minutes
+- **THEN** the page SHALL render an empty-state message (e.g., "No DLQ messages in the last 5 minutes") and SHALL NOT throw or hang
+

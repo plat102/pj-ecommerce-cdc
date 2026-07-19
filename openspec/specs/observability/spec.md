@@ -100,15 +100,20 @@ A `prometheuscommunity/postgres-exporter:v0.15.0` container SHALL run with a con
 **Phase 3 — Alerts + service resilience (decomposed from `alerting-and-notification` and `service-resilience`).**
 
 ### Requirement: infrastructure-alert-rules
-Grafana SHALL be provisioned with alert rules covering the failure classes the pipeline actually hits. The rules SHALL live under `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml` and SHALL include at minimum: `kafka_consumer_lag_high` (sum-by-consumergroup lag > 10000, for 5m, warning); `debezium_connector_not_running` (kafka_connect_connector_status{status="running"} < 1, for 1m, critical); `spark_streaming_job_absent` (no batch progress in 10 min, for 5m, critical); `container_memory_over_90pct` (cAdvisor usage/limit > 0.9, for 10m, warning); `container_restart_loop` (>3 restarts in 10 min, for 2m, critical). All rules SHALL live in the `observability` Grafana folder.
+Grafana SHALL be provisioned with alert rules covering the failure classes the pipeline actually hits. The rules SHALL live under `infrastructure/docker/grafana/provisioning/alerting/infra-alerts.yml` and SHALL include at minimum: `kafka_consumer_lag_high` (sum-by-consumergroup lag > 10000, for 5m, warning); `debezium_connector_not_running` (kafka_connect_connector_status{status="running"} < 1, for 1m, critical); `spark_streaming_job_absent` (no batch progress in 10 min, for 5m, critical); `container_memory_over_90pct` (cAdvisor usage/limit > 0.9, for 10m, warning); `container_restart_loop` (>3 restarts in 10 min, for 2m, critical); `dlq_traffic_present` (any `*_dlq` topic sees >0 messages in a 5-minute window, for 1m, warning). All rules SHALL live in the `Observability Alerts` Grafana folder.
 
-#### Scenario: five infra rules provisioned
+#### Scenario: six infra rules provisioned
 - **WHEN** the Grafana Alerting page (`http://localhost:3000/alerting/list`) is opened after startup
-- **THEN** the folder `observability` SHALL contain (at minimum) the rules named above, each with a non-empty `condition`, `for` duration, and severity label
+- **THEN** the folder `Observability Alerts` SHALL contain (at minimum) the six rules named above, each with a non-empty `condition`, `for` duration, and severity label
 
 #### Scenario: connector failure fires alert
 - **WHEN** the Debezium connector transitions away from RUNNING for more than 1 minute
 - **THEN** the `debezium_connector_not_running` rule SHALL enter the `Alerting` state
+
+#### Scenario: DLQ traffic fires alert
+- **WHEN** any `*_dlq` topic receives its first message
+- **THEN** the `dlq_traffic_present` rule SHALL enter the `Firing` state within the 1-minute confirmation window
+- **AND** the alert SHALL route to the default-webhook contact point provisioned by `alert-contact-point-webhook`
 
 ### Requirement: alert-contact-point-webhook
 Grafana Unified Alerting SHALL be provisioned with a default webhook contact point that reads its URL from the `OBS_ALERT_WEBHOOK_URL` environment variable, and (optionally) a Slack contact point reading `OBS_SLACK_WEBHOOK_URL`. If the env vars are unset, the URL falls back to a noop placeholder so provisioning SHALL still succeed and alerts continue to appear in the Grafana UI even though external notifications SHALL NOT be delivered. The existing `cdc_freshness_10min_slo` rule (data-governance Phase 3) SHALL be updated to route through this default contact point.

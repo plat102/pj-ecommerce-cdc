@@ -46,7 +46,7 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Run `openspec validate --changes --specs` — all pass.
-- [ ] 5.2 `openspec archive add-error-handling-dlq --yes` — merge deltas into main specs.
-- [ ] 5.3 Verify main specs post-archive: `openspec/specs/error-handling/spec.md` exists with 9 phase-scoped requirements; `cdc-pipeline`, `data-governance`, `observability`, `streamlit-ui` MODIFIED as declared.
-- [ ] 5.4 Tick post-archive tasks in the archived tasks.md (5.1-5.4 self-reference).
+- [x] 5.1 Run `openspec validate --changes --specs` — all pass. Result: 8/8 items validated (`change/add-error-handling-dlq` + 7 specs) on clean tree (uncommitted follow-up work stashed first).
+- [x] 5.2 `openspec archive add-error-handling-dlq --yes` — merge deltas into main specs. Result: moved to `openspec/changes/archive/2026-07-19-add-error-handling-dlq/`; 10 additions, 4 modifications across 5 specs.
+- [x] 5.3 Verify main specs post-archive: `openspec/specs/error-handling/spec.md` exists with 9 phase-scoped requirements (kafka-connect-dlq-config, kafka-connect-dlq-topic, dlq-envelope-shared, spark-sink-dlq-wrapper, spark-sink-dlq-envelope, spark-sink-dlq-opt-in, central-dlq-dashboard, dlq-traffic-alert-rule, streamlit-dlq-triage-view); `cdc-pipeline` +2 modified, `data-governance` +1 modified, `observability` +1 modified, `streamlit-ui` +1 added.
+- [x] 5.4 Tick post-archive tasks in the archived tasks.md (5.1-5.4 self-reference).

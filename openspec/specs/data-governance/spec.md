@@ -122,16 +122,20 @@ Each Spark CDC job SHALL run a Great Expectations suite (loaded from `data-platf
 - **THEN** the suite SHALL be resolved from `${GX_SUITE_DIR:-/home/jupyter/governance/expectations}/customers_suite.json` and SHALL contain at least the `expect_column_values_to_not_be_null` expectation on `id` and `_version`
 
 ### Requirement: dlq-on-validation-failure
-Rows that fail any column-level expectation SHALL be routed to a `{table}_dlq` Kafka topic before the `foreachBatch` delegates to the ClickHouse writer. The DLQ payload SHALL be the JSON serialization of the failing row plus a `_failed_expectation` field naming the first failing expectation type. Failing rows SHALL NOT reach the ClickHouse `{table}_cdc` table.
+Rows that fail any column-level expectation SHALL be routed to a `{table}_dlq` Kafka topic before the `foreachBatch` delegates to the ClickHouse writer. The DLQ payload SHALL be produced via the shared `data-platform/streaming/spark/src/governance/dlq_producer.py::emit()` helper so its envelope matches sibling DLQ topics: it SHALL include `_error_stage` (constant `"gx_validation"`), `_error_class` (constant `"ExpectationFailure"`), `_error_message` (the failing expectation name), and `_error_expectation` (the expectation name) alongside the original row JSON. Failing rows SHALL NOT reach the ClickHouse `{table}_cdc` table.
 
-#### Scenario: invalid row lands in DLQ
+#### Scenario: invalid row lands in DLQ with shared envelope
 - **WHEN** a customers CDC event arrives with `id = null` and `ENABLE_GX_GATE=1`
-- **THEN** the row SHALL be written to `customers_dlq` with `_failed_expectation = "expect_column_values_to_not_be_null"`
+- **THEN** the row SHALL be written to `customers_dlq` with `_error_stage="gx_validation"` and `_error_expectation="expect_column_values_to_not_be_null"`
 - **AND** the same row SHALL NOT appear in `customers_cdc`
 
 #### Scenario: valid rows in the same batch still land
 - **WHEN** a batch of 10 orders contains one row failing `expect_column_values_to_be_in_set` on `_deleted` and nine passing rows
 - **THEN** the nine passing rows SHALL be written to `orders_cdc` and the one failing row SHALL be written to `orders_dlq`
+
+#### Scenario: envelope shape matches sibling DLQs
+- **WHEN** a DLQ consumer reads messages from `customers_dlq` (GX) and `customers_sink_dlq` (sink)
+- **THEN** both messages SHALL share the required envelope fields `_error_stage`, `_error_class`, `_error_message` — only the constant values differ (`"gx_validation"` vs `"spark_sink"`) so a single parser can handle both
 
 ### Requirement: freshness-slo-and-alert
 The ClickHouse `data_freshness` view SHALL be wired to a Grafana alert rule that fires when any target table has `minutes_since_last_update > 10`. The alert rule SHALL be provisioned via `infrastructure/docker/grafana/provisioning/alerting/data_freshness.yml` (not hand-configured in the Grafana UI). The rule SHALL reference the default contact point provisioned by observability Phase 3 so notifications reach an external channel (webhook / Slack) rather than terminating in the Grafana UI.
