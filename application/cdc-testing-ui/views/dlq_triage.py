@@ -19,9 +19,15 @@ import streamlit as st
 
 DLQ_TOPICS: List[str] = [
     "debezium_connect_dlq",
+    # GX validation gate publishes to `{table_name}_dlq`. Legacy short-name
+    # topics ({table}_dlq) are kept for backward compatibility with older
+    # producers; current jobs write to the `{table}_cdc_dlq` variant.
     "customers_dlq",
     "products_dlq",
     "orders_dlq",
+    "customers_cdc_dlq",
+    "products_cdc_dlq",
+    "orders_cdc_dlq",
     "customers_sink_dlq",
     "products_sink_dlq",
     "orders_sink_dlq",
