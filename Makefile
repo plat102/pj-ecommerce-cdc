@@ -69,6 +69,7 @@ sh-kafka: ## Connect to Kafka shell
 
 up: ## Start entire stack
 	$(COMPOSE_ALL) up -d
+	${MAKE} apply-dlq-topics || echo "❌ Failed to apply DLQ topic retention"
 	${MAKE} apply-pg-connector || echo "❌ Failed to apply PostgreSQL connector"
 
 start: ## Start all containers
@@ -115,6 +116,9 @@ apply-pg-connector: ## Apply PostgreSQL CDC connector
 	curl -X POST http://localhost:8083/connectors \
 		-H "Content-Type: application/json" \
 		-d @data-platform/cdc/connectors/register-pg.json
+
+apply-dlq-topics: ## Pre-create DLQ topics with explicit retention (idempotent)
+	@./scripts/setup_dlq_topics.sh
 
 check-connector: ## Check connector status
 	@echo "📋 Checking connector status..."
