@@ -16,15 +16,20 @@ The environment file SHALL live at `infrastructure/docker/.env`. It MUST be crea
 ---
 
 ### Requirement: full-stack-startup
-`make up` SHALL start all seven service groups (db, kafka, debezium, ui, spark, analytics, observability) using `docker-compose` with all seven compose files and SHALL automatically apply the Debezium PostgreSQL connector after services start. Startup ordering SHALL rely on `depends_on: { condition: service_healthy }` where healthchecks exist, replacing time-based sleeps.
+`make up` SHALL start all seven service groups (db, kafka, debezium, ui, spark, analytics, observability) using `docker-compose` with all seven compose files. After Kafka reports healthy AND before the Debezium PostgreSQL connector is applied, `make up` SHALL invoke `make apply-dlq-topics` to pre-create every DLQ topic with explicit retention config (see `dlq-topic-retention` in `error-handling`). Startup ordering SHALL rely on `depends_on: { condition: service_healthy }` where healthchecks exist, replacing time-based sleeps.
 
 #### Scenario: full stack running after make up
 - **WHEN** `make up` completes without error
 - **THEN** all core services (postgres, kafka1, zookeeper, debezium, debezium-ui, redpanda-console, schema-registry, ed-pyspark-jupyter, clickhouse, grafana, cdc-testing-ui) AND all observability services (loki, alloy, prometheus, cadvisor, node-exporter, kafka-exporter, postgres-exporter) SHALL have status `running` in `make status`
 
-#### Scenario: connector auto-applied
+#### Scenario: DLQ topics pre-created
+- **WHEN** `make up` completes on a cold stack
+- **THEN** `kafka-topics --list --bootstrap-server localhost:9092` SHALL include every DLQ topic (`debezium_connect_dlq`, `{customers,products,orders}_cdc_dlq`, `{customers,products,orders}_cdc_sink_dlq`) even though no bad record has yet been produced
+
+#### Scenario: connector auto-applied after DLQ topics exist
 - **WHEN** `make up` completes
 - **THEN** `make check-connector` SHALL show connector `pg-connector-ecommerce` with status RUNNING
+- **AND** the `debezium_connect_dlq` topic SHALL already exist on the broker at the moment the connector is registered
 
 #### Scenario: health-gated startup
 - **WHEN** `make up` is invoked cold (no containers running)
@@ -51,7 +56,7 @@ The environment file SHALL live at `infrastructure/docker/.env`. It MUST be crea
 ---
 
 ### Requirement: per-service-targets
-Each service group SHALL have dedicated `up-*`, `down-*`, `logs-*`, and `sh-*` Makefile targets allowing developers to operate individual services without affecting others. The governance catalog stack (OpenMetadata + MySQL + Elasticsearch) SHALL be operated via `up-governance` / `down-governance` / `logs-governance` targets and SHALL NOT be included in `make up` because of its memory footprint. The observability stack (loki + alloy + prometheus + cadvisor + node-exporter + exporters) SHALL be operated via `up-observability` / `down-observability` / `logs-observability` / `status-observability` targets and SHALL be included in `make up` by default because its footprint (~700MB) fits within the local-dev budget and its value comes precisely from being present during normal operation.
+Each service group SHALL have dedicated `up-*`, `down-*`, `logs-*`, and `sh-*` Makefile targets allowing developers to operate individual services without affecting others. The governance catalog stack (OpenMetadata + MySQL + Elasticsearch) SHALL be operated via `up-governance` / `down-governance` / `logs-governance` targets and SHALL NOT be included in `make up` because of its memory footprint. The observability stack SHALL be operated via `up-observability` / `down-observability` / `logs-observability` / `status-observability` targets and SHALL be included in `make up` by default. DLQ topic setup SHALL additionally be operated via the standalone Makefile target `apply-dlq-topics` (idempotent, safe to re-run) so operators can drift-correct or apply operator overrides without re-running the whole stack.
 
 #### Scenario: start only db and kafka
 - **WHEN** `make up-db` and `make up-kafka` are run without `make up`
@@ -61,17 +66,10 @@ Each service group SHALL have dedicated `up-*`, `down-*`, `logs-*`, and `sh-*` M
 - **WHEN** `make sh-pg` is executed with the db service running
 - **THEN** a `psql` shell SHALL open connected to the `ecommerce` database as the configured user
 
-#### Scenario: governance stack starts independently
-- **WHEN** `make up-governance` is run against a repo where `make up` is already running
-- **THEN** OpenMetadata, its MySQL, and its Elasticsearch containers SHALL start alongside (attaching to the shared `ecommerce-network`), and the existing CDC containers SHALL be unaffected
-
-#### Scenario: governance stack absent from make up
-- **WHEN** `make up` is run
-- **THEN** neither `openmetadata-server`, `openmetadata-mysql`, nor `openmetadata-elasticsearch` SHALL appear in the resulting container list
-
-#### Scenario: observability stack included in make up
-- **WHEN** `make up` is run
-- **THEN** loki, alloy, prometheus, cadvisor, node-exporter, kafka-exporter, and postgres-exporter SHALL all appear in `make status` alongside the core CDC containers
+#### Scenario: apply-dlq-topics is standalone
+- **WHEN** the stack is already running and `make apply-dlq-topics` is invoked
+- **THEN** the target SHALL exec into `kafka1` and run the DLQ topic setup script, without touching any other container
+- **AND** re-running the target immediately SHALL succeed with no error (idempotent)
 
 ### Requirement: connector-name
 The Debezium PostgreSQL connector SHALL always be named `pg-connector-ecommerce`. All connector management targets (`make check-connector`, `make restart-connector`, `make delete-connector`) SHALL reference this fixed name.

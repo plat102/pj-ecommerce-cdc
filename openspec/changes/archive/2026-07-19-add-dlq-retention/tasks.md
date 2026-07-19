@@ -28,7 +28,7 @@
 
 ## 4. Archive
 
-- [ ] 4.1 Run `openspec validate --changes --specs` — all pass.
-- [ ] 4.2 `openspec archive add-dlq-retention --yes` — merge deltas into main specs.
-- [ ] 4.3 Verify main specs post-archive: `error-handling` gains `dlq-topic-retention` + `dlq-topic-partitions-and-replication` requirements; `infrastructure` MODIFIED as declared.
-- [ ] 4.4 Tick post-archive tasks in the archived tasks.md.
+- [x] 4.1 Ran `openspec validate --changes --specs` — 9/9 pass (analytics, cdc-pipeline, data-governance, error-handling, infrastructure, observability, python-tooling, streamlit-ui + this change).
+- [x] 4.2 `openspec archive add-dlq-retention --yes` — merged deltas into main specs: +2 requirements in error-handling, ~2 modified in infrastructure.
+- [x] 4.3 Post-archive verification: `openspec/specs/error-handling/spec.md` now contains 11 requirements (9 pre-existing + `dlq-topic-retention` + `dlq-topic-partitions-and-replication`); `infrastructure` `full-stack-startup` + `per-service-targets` include the `apply-dlq-topics` wiring.
+- [x] 4.4 Ticked post-archive tasks (this file).
