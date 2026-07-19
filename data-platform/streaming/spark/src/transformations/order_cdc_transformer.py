@@ -14,28 +14,26 @@ class OrderCDCTransformer(CDCTransformer):
         """
         logger.info("🔄 Transforming orders CDC data for ClickHouse...")
 
+        # On delete (op=d) source from `before` so non-nullable ClickHouse
+        # columns still receive a value; otherwise `after`.
         return transformed_df.select(
-            # ID: after/before/key
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.id"))
-              .when(col("value_json.op") == "d", col("value_json.before.id"))
-              .otherwise(col("key_json.id")).alias("id"),
-
-            # Fields
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.customer_id"))
-              .otherwise(lit(None)).alias("customer_id"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.product_id"))
-              .otherwise(lit(None)).alias("product_id"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.quantity"))
-              .otherwise(lit(None)).alias("quantity"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.order_time"))
-              .otherwise(lit(None)).alias("order_time"),
-
-            # Version & delete flag
+            when(col("value_json.op") == "d", col("value_json.before.id"))
+              .otherwise(col("value_json.after.id"))
+              .alias("id"),
+            when(col("value_json.op") == "d", col("value_json.before.customer_id"))
+              .otherwise(col("value_json.after.customer_id"))
+              .alias("customer_id"),
+            when(col("value_json.op") == "d", col("value_json.before.product_id"))
+              .otherwise(col("value_json.after.product_id"))
+              .alias("product_id"),
+            when(col("value_json.op") == "d", col("value_json.before.quantity"))
+              .otherwise(col("value_json.after.quantity"))
+              .alias("quantity"),
+            when(col("value_json.op") == "d", col("value_json.before.order_time"))
+              .otherwise(col("value_json.after.order_time"))
+              .alias("order_time"),
             col("value_json.ts_ms").alias("_version"),
-            when(col("value_json.op") == "d", lit(1)).otherwise(lit(0)).alias("_deleted")
+            when(col("value_json.op") == "d", lit(1)).otherwise(lit(0)).alias("_deleted"),
         )
 
     @staticmethod
@@ -46,30 +44,24 @@ class OrderCDCTransformer(CDCTransformer):
         logger.info("🔄 Transforming orders CDC data for debug...")
 
         return transformed_df.select(
-            # ID: after/before/key
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.id"))
-              .when(col("value_json.op") == "d", col("value_json.before.id"))
-              .otherwise(col("key_json.id")).alias("id"),
-
-            # Fields
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.customer_id"))
-              .otherwise(lit(None)).alias("customer_id"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.product_id"))
-              .otherwise(lit(None)).alias("product_id"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.quantity"))
-              .otherwise(lit(None)).alias("quantity"),
-
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.order_time"))
-              .otherwise(lit(None)).alias("order_time"),
-
-            # Version & delete flag
+            when(col("value_json.op") == "d", col("value_json.before.id"))
+              .otherwise(col("value_json.after.id"))
+              .alias("id"),
+            when(col("value_json.op") == "d", col("value_json.before.customer_id"))
+              .otherwise(col("value_json.after.customer_id"))
+              .alias("customer_id"),
+            when(col("value_json.op") == "d", col("value_json.before.product_id"))
+              .otherwise(col("value_json.after.product_id"))
+              .alias("product_id"),
+            when(col("value_json.op") == "d", col("value_json.before.quantity"))
+              .otherwise(col("value_json.after.quantity"))
+              .alias("quantity"),
+            when(col("value_json.op") == "d", col("value_json.before.order_time"))
+              .otherwise(col("value_json.after.order_time"))
+              .alias("order_time"),
             col("value_json.ts_ms").alias("_version"),
             when(col("value_json.op") == "d", lit(1)).otherwise(lit(0)).alias("_deleted"),
-
-            # Operation type for debug
-            col("value_json.op").alias("operation")
+            col("value_json.op").alias("operation"),
         )
 
     @staticmethod

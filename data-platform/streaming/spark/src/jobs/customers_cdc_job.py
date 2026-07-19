@@ -7,13 +7,12 @@ from pyspark.sql.streaming import StreamingQuery
 from typing import Optional
 
 from src.config.app_config import AppConfig
-from src.schemas.cdc_schemas import CDCSchemas
 from src.io.kafka_client import KafkaReader
 from src.io.clickhouse_client import ClickHouseWriter
 from src.transformations.kafka_parser import KafkaMessageParser
 from src.transformations.cdc_transformer import CDCTransformer
 from src.transformations.customers_cdc_transformer import CustomersCDCTransformer
-from src.utils.helpers import validate_config
+from src.utils.helpers import fetch_avro_schema, validate_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -91,21 +90,23 @@ class CDCProcessor:
     def process_customers_cdc(self):
         """Process customers CDC stream"""
         topic = self.config.kafka.topics["customers"]
-        
+
         # Read Kafka stream
         kafka_stream = self.kafka_reader.read_stream(topic)
-        
-        # Parse Kafka messages
-        kafka_json_df = KafkaMessageParser.parse_raw_message(kafka_stream)
-        
-        # Parse JSON using schemas
-        schemas = CDCSchemas()
-        cdc_df = KafkaMessageParser.parse_json_structures(
-            kafka_json_df, 
-            schemas.get_key_schema(), 
-            schemas.get_customers_value_schema()
+
+        # Fetch Avro schemas from Apicurio (Confluent-compat endpoint) once at
+        # query build time; the producer schema is stable per topic. References
+        # (e.g. Debezium `Source`) are inlined by fetch_avro_schema.
+        registry_url = self.config.schema_registry.url
+        key_schema_json = fetch_avro_schema(registry_url, f"{topic}-key")
+        value_schema_json = fetch_avro_schema(registry_url, f"{topic}-value")
+
+        cdc_df = KafkaMessageParser.parse_avro_message(
+            kafka_stream=kafka_stream,
+            key_avro_schema=key_schema_json,
+            value_avro_schema=value_schema_json,
         )
-        
+
         # Transform to target format based on mode
         if self.config.debug_mode:
             # Debug mode: include operation column for debugging
@@ -174,7 +175,7 @@ class CDCProcessor:
             query = (customers_df.writeStream
                     .outputMode("append")
                     .foreachBatch(write_batch_func)
-                    .option("checkpointLocation", f"{self.config.checkpoint_location}/customers")
+                    .option("checkpointLocation", f"{self.config.checkpoint_location}/customers_cdc/v1")
                     .trigger(processingTime=self.config.trigger_interval)
                     .start())
         

@@ -7,7 +7,7 @@ set -e
 JOB_TYPE="customers"
 DEBUG_MODE="false"
 SPARK_MASTER="local[*]"
-PACKAGES="org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,com.clickhouse:clickhouse-jdbc:0.6.0,org.apache.spark:spark-avro_2.12:3.5.0,io.confluent:kafka-schema-registry-client:7.8.2,io.confluent:kafka-avro-serializer:7.8.2,io.openlineage:openlineage-spark_2.12:1.24.2"
+PACKAGES="org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.0,com.clickhouse:clickhouse-jdbc:0.6.0,org.apache.spark:spark-avro_2.12:3.3.0,io.confluent:kafka-schema-registry-client:7.8.2,io.confluent:kafka-avro-serializer:7.8.2,io.openlineage:openlineage-spark_2.12:1.24.2"
 REPOSITORIES="https://packages.confluent.io/maven/"
 
 # OpenLineage listener config. Opt-in via ENABLE_OPENLINEAGE=1 so dev

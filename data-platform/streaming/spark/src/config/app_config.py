@@ -44,6 +44,12 @@ class ClickHouseConfig:
 
 
 @dataclass
+class SchemaRegistryConfig:
+    """Apicurio Registry connection (Confluent-compatible endpoint)."""
+    url: str = "http://schema-registry:8080/apis/ccompat/v7"
+
+
+@dataclass
 class SparkConfig:
     """Spark application configuration"""
     app_name: str = "Ecommerce CDC Processing"
@@ -75,6 +81,13 @@ class AppConfig:
             password=os.getenv("CLICKHOUSE_PASSWORD", "clickhouse123")
         )
         
+        self.schema_registry = SchemaRegistryConfig(
+            url=os.getenv(
+                "SCHEMA_REGISTRY_URL",
+                "http://schema-registry:8080/apis/ccompat/v7",
+            )
+        )
+
         self.spark = SparkConfig(
             app_name=os.getenv("SPARK_APP_NAME", "Ecommerce CDC Processing"),
             master=os.getenv("SPARK_MASTER", "local[*]"),

@@ -34,35 +34,29 @@ class CustomersCDCTransformer(CDCTransformer): # <domain><context><role>
         """
         logger.info("🔄 Transforming customers CDC data for ClickHouse...")
 
+        # On delete (op=d) sourced from `before`; PII masking still applies so
+        # the tombstone row in ClickHouse never carries plaintext identity.
         return cdc_df.select(
-            # ID: From after/before/key based on operation
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.id"))
-            .when(col("value_json.op") == "d", col("value_json.before.id"))
-            .otherwise(col("key_json.id")).alias("id"),
+            when(col("value_json.op") == "d", col("value_json.before.id"))
+              .otherwise(col("value_json.after.id"))
+              .alias("id"),
 
-            # name: tokenized before landing in ClickHouse (see openspec
-            # data-governance Pillar 3). Delete events emit null.
-            when(
-                col("value_json.op").isin("c", "u", "r"),
-                _mask_name(col("value_json.after.name")),
-            ).otherwise(lit(None)).alias("name"),
+            _mask_name(
+                when(col("value_json.op") == "d", col("value_json.before.name"))
+                  .otherwise(col("value_json.after.name"))
+            ).alias("name"),
 
-            # email: SHA-256(email, PII_SALT). Deterministic so joins by
-            # hashed email still work across systems.
-            when(
-                col("value_json.op").isin("c", "u", "r"),
-                _mask_email(col("value_json.after.email")),
-            ).otherwise(lit(None)).alias("email"),
+            _mask_email(
+                when(col("value_json.op") == "d", col("value_json.before.email"))
+                  .otherwise(col("value_json.after.email"))
+            ).alias("email"),
 
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.created_at"))
-            .otherwise(lit(None)).alias("created_at"),
+            when(col("value_json.op") == "d", col("value_json.before.created_at"))
+              .otherwise(col("value_json.after.created_at"))
+              .alias("created_at"),
 
-            # _version: From ts_ms for ReplacingMergeTree
             col("value_json.ts_ms").alias("_version"),
-
-            # _deleted: 0 for insert/update, 1 for delete
-            when(col("value_json.op") == "d", lit(1))
-            .otherwise(lit(0)).alias("_deleted")
+            when(col("value_json.op") == "d", lit(1)).otherwise(lit(0)).alias("_deleted"),
         )
 
     @staticmethod
@@ -78,36 +72,29 @@ class CustomersCDCTransformer(CDCTransformer): # <domain><context><role>
         """
         logger.info("🔄 Transforming customers CDC data for debug...")
 
+        # Debug output — PII still masked so console never leaks plaintext.
         return cdc_df.select(
-            # ID: From after/before/key based on operation
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.id"))
-            .when(col("value_json.op") == "d", col("value_json.before.id"))
-            .otherwise(col("key_json.id")).alias("id"),
+            when(col("value_json.op") == "d", col("value_json.before.id"))
+              .otherwise(col("value_json.after.id"))
+              .alias("id"),
 
-            # Debug mode also masks PII so console logs never contain
-            # plaintext values.
-            when(
-                col("value_json.op").isin("c", "u", "r"),
-                _mask_name(col("value_json.after.name")),
-            ).otherwise(lit(None)).alias("name"),
+            _mask_name(
+                when(col("value_json.op") == "d", col("value_json.before.name"))
+                  .otherwise(col("value_json.after.name"))
+            ).alias("name"),
 
-            when(
-                col("value_json.op").isin("c", "u", "r"),
-                _mask_email(col("value_json.after.email")),
-            ).otherwise(lit(None)).alias("email"),
+            _mask_email(
+                when(col("value_json.op") == "d", col("value_json.before.email"))
+                  .otherwise(col("value_json.after.email"))
+            ).alias("email"),
 
-            when(col("value_json.op").isin("c", "u", "r"), col("value_json.after.created_at"))
-            .otherwise(lit(None)).alias("created_at"),
+            when(col("value_json.op") == "d", col("value_json.before.created_at"))
+              .otherwise(col("value_json.after.created_at"))
+              .alias("created_at"),
 
-            # _version: From ts_ms for ReplacingMergeTree
             col("value_json.ts_ms").alias("_version"),
-
-            # _deleted: 0 for insert/update, 1 for delete
-            when(col("value_json.op") == "d", lit(1))
-            .otherwise(lit(0)).alias("_deleted"),
-
-            # Operation type for debugging
-            col("value_json.op").alias("operation")
+            when(col("value_json.op") == "d", lit(1)).otherwise(lit(0)).alias("_deleted"),
+            col("value_json.op").alias("operation"),
         )
     
     @staticmethod
