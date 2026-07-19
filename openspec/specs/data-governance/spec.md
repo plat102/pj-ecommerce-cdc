@@ -119,7 +119,7 @@ Each Spark CDC job SHALL run a Great Expectations suite (loaded from `data-platf
 
 #### Scenario: expectation suite path
 - **WHEN** the customers CDC job starts under `ENABLE_GX_GATE=1`
-- **THEN** the suite SHALL be resolved from `${GX_SUITE_DIR:-/home/jupyter/governance/expectations}/customers_suite.json` and SHALL contain at least the `expect_column_values_to_not_be_null` expectation on `id` and `_version`
+- **THEN** the suite SHALL be resolved from `${GX_SUITE_DIR:-/home/jupyter/governance/expectations}/customers_cdc_suite.json` (matching the `table_name` used to instantiate the gate) and SHALL contain at least the `expect_column_values_to_not_be_null` expectation on `id` and `_version`
 
 ### Requirement: dlq-on-validation-failure
 Rows that fail any column-level expectation SHALL be routed to a `{table}_dlq` Kafka topic before the `foreachBatch` delegates to the ClickHouse writer. The DLQ payload SHALL be produced via the shared `data-platform/streaming/spark/src/governance/dlq_producer.py::emit()` helper so its envelope matches sibling DLQ topics: it SHALL include `_error_stage` (constant `"gx_validation"`), `_error_class` (constant `"ExpectationFailure"`), `_error_message` (the failing expectation name), and `_error_expectation` (the expectation name) alongside the original row JSON. Failing rows SHALL NOT reach the ClickHouse `{table}_cdc` table.

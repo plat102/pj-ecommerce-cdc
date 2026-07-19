@@ -1,5 +1,5 @@
 {
-  "expectation_suite_name": "customers_cdc_suite",
+  "expectation_suite_name": "customers_cdc",
   "meta": {
     "notes": "Applied to each Spark micro-batch of pg.public.customers CDC events after transform, before ClickHouse write. Failures route to customers_dlq."
   },
