@@ -66,10 +66,10 @@ pj-ecommerce-cdc/
 │                                       setup_observability.sh, setup_simple_analytics.sh)
 ├── tests/                              pytest suite
 ├── docs/                               Human-readable overview (this folder)
-├── Makefile                            Canonical entrypoint (see CLAUDE.md §Common commands)
+├── Makefile                            Canonical entrypoint — run `make help` for target list
 ├── pyproject.toml + uv.lock            uv-managed Python env (.venv/)
-├── CLAUDE.md                           Ground truth for common commands, gotchas, service URLs
 ├── AGENTS.md                           Contributor-facing agent notes
+├── CLAUDE.md                           Guidance file consumed by the Claude Code CLI (not a doc)
 └── README.md
 ```
 

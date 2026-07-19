@@ -1,8 +1,8 @@
 # Architecture
 
-End-to-end Change Data Capture demo: **PostgreSQL → Debezium → Kafka → PySpark Structured Streaming → ClickHouse → Grafana**, with a Streamlit UI for driving CDC events, a Loki+Prometheus observability stack, and a governance layer (Apicurio schema registry, PII masking, GX validation gate, DLQ, RBAC, retention). Everything runs locally via Docker Compose orchestrated by the Makefile.
+End-to-end Change Data Capture demo: **PostgreSQL → Debezium → Kafka → PySpark Structured Streaming → ClickHouse → Grafana**, with a Streamlit UI for driving CDC events, a Loki+Prometheus observability stack, and a governance layer (Apicurio schema registry, PII masking, GX validation gate, DLQ, RBAC, retention). Everything runs locally via Docker Compose orchestrated by the `Makefile` at the repo root.
 
-For the canonical rundown of make targets and env-file conventions see `CLAUDE.md` at the repo root.
+Prerequisite: create `infrastructure/docker/.env` from `.env.example` before running any `make` target — the Makefile has no fallback.
 
 ## High-level architecture
 
@@ -81,7 +81,7 @@ flowchart LR
 | Kafka / Postgres / JMX exporters | 9308, 9187, 5556 | Pipeline-source metrics |
 | OTEL Collector | 4317 (gRPC), 4318 (HTTP), 8889 (self-metrics) | Unified ingress → Loki + ClickHouse `otel_logs` / `otel_traces` |
 
-Docker Compose is split into seven files under `infrastructure/docker/` (`db`, `kafka`, `debezium`, `ui`, `spark`, `analytics`, `observability`) — `make up` composes them all under the `ecommerce-cdc` project name. See `CLAUDE.md` §Common commands.
+Docker Compose is split into seven files under `infrastructure/docker/` (`db`, `kafka`, `debezium`, `ui`, `spark`, `analytics`, `observability`) — `make up` composes them all under the `ecommerce-cdc` project name. Common Makefile targets: `make up` / `make down` / `make stop` / `make start` / `make status` / `make logs`; per-service groups have their own `up-*` / `down-*` / `logs-*` / `sh-*` targets. Run `make help` (or read the `Makefile`) for the full list.
 
 ## Record flow (single row)
 

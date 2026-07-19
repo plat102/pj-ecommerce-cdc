@@ -63,7 +63,7 @@ docker network create ecommerce-network
 make up
 ```
 
-`make up` composes seven docker-compose files (db, kafka, debezium, ui, spark, analytics, observability) under project name `ecommerce-cdc` and auto-registers the Debezium PostgreSQL connector after services report healthy. See `CLAUDE.md` for the full make-target reference.
+`make up` composes seven docker-compose files (db, kafka, debezium, ui, spark, analytics, observability) under project name `ecommerce-cdc` and auto-registers the Debezium PostgreSQL connector after services report healthy. Run `make help` for the full list of targets.
 
 ## 6. Verify
 

@@ -140,7 +140,7 @@ Pattern applied stack-wide:
 
 Every service with a well-defined readiness probe declares a `healthcheck:`; downstream services use `depends_on: { condition: service_healthy }` so `make up` sequences without time-based sleeps. Checks include `pg_isready`, `kafka-topics --list`, Debezium Connect `curl -f localhost:8083/connectors`, ClickHouse `/ping`, Loki `/ready`, Prometheus `/-/ready`, Grafana `/api/health`, Apicurio `/apis/registry/v2/system/info`.
 
-Full host-side port list is in [`architecture.md`](architecture.md#local-service-urls-after-make-up) (also mirrored in `CLAUDE.md` §Observability).
+Full host-side port list is in [`architecture.md`](architecture.md#local-service-urls-after-make-up).
 
 ## Verify locally
 
