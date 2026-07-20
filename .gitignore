@@ -94,3 +94,15 @@ infrastructure/terraform/terraform.tfvars
 
 # jmx-exporter jar fetched by scripts/setup_observability.sh; not committed.
 infrastructure/docker/jmx-exporter/*.jar
+
+# GX Data Docs runtime output (see openspec/changes/add-gx-data-docs). The
+# validations store, data-docs HTML, and Prometheus textfile are all
+# regenerable from each batch; only the config + suite definitions are
+# committed.
+data-platform/governance/gx-runtime/uncommitted/
+data-platform/governance/gx-runtime/checkpoints/
+data-platform/governance/gx-runtime/textfile/gx.prom
+# GX auto-scaffolds these on first `context.get_context(...)` — they carry
+# no committed value (per-deployment UUID, empty plugin dirs).
+data-platform/governance/gx-runtime/expectations/.ge_store_backend_id
+data-platform/governance/gx-runtime/plugins/

@@ -1,0 +1,23 @@
+# GX Data Docs static site (Phase 3 of add-gx-data-docs).
+#
+# Serves the HTML site that the GxSuiteRunner rebuilds into
+# data-platform/governance/gx-runtime/uncommitted/data_docs/local_site/
+# every batch. Opt-in: not in `make up` — bring up with `make up-gx-docs`
+# for incident review or spot-checking suite coverage.
+
+services:
+  gx-data-docs-server:
+    image: nginx:alpine
+    container_name: gx-data-docs-server
+    restart: on-failure:3
+    ports:
+      - "8890:80"
+    volumes:
+      - ../../data-platform/governance/gx-runtime/uncommitted/data_docs/local_site:/usr/share/nginx/html:ro
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    external: true
+    name: ecommerce-network

@@ -10,11 +10,23 @@ services:
       JUPYTER_PORT: 8888
       SPARK_UI_PORT: 4040
       GRANT_SUDO: yes
+      # GX flags. Read from the docker .env — omit / leave blank to keep the
+      # runner opt-in default. When both are 1 the inline gate remains
+      # authoritative and GX runs as a reporter (see add-gx-data-docs).
+      ENABLE_GX_GATE: ${ENABLE_GX_GATE:-}
+      ENABLE_GX_DATA_DOCS: ${ENABLE_GX_DATA_DOCS:-}
+      GX_PROJECT_DIR: ${GX_PROJECT_DIR:-/opt/gx/}
+      GX_SUITE_DIR: ${GX_SUITE_DIR:-/opt/gx/expectations}
+      GX_TEXTFILE_DIR: ${GX_TEXTFILE_DIR:-/opt/gx/textfile/}
     volumes:
       - streaming_data:/data:rw
       - ./spark/data:/home/jupyter/data
       - ../../data-platform/streaming:/home/jupyter/src-streaming
-      
+      # GX Data Docs runtime root. Runner writes validations, data-docs HTML,
+      # and textfile/gx.prom under this dir; nginx sidecar + node-exporter
+      # mount the same host path read-only.
+      - ../../data-platform/governance/gx-runtime:/opt/gx:rw
+
     networks:
       - ecommerce-network
 

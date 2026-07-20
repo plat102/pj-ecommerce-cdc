@@ -1,0 +1,78 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "orders_cdc",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "customer_id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "product_id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "quantity",
+        "max_value": 100000,
+        "min_value": 1,
+        "mostly": 0.99
+      },
+      "meta": {
+        "why": "Positive quantity; NULL on op=d excluded via mostly"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "_version"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "_version",
+        "max_value": 4102444800000,
+        "min_value": 1577836800000
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "_deleted",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {}
+    }
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19",
+    "notes": "Applied to each Spark micro-batch of pg.public.orders CDC events after transform, before ClickHouse write. Failures route to orders_dlq."
+  }
+}

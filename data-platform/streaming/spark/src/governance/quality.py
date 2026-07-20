@@ -152,6 +152,8 @@ def with_gx_gate(inner_writer: Callable[[DataFrame, int], None], table: str) -> 
     from pyspark.sql.functions import col, lit
     from src.governance import dlq_producer
 
+    gx_runner = _build_gx_runner_if_enabled()
+
     def wrapped(batch_df: DataFrame, batch_id: int) -> None:
         if batch_df.isEmpty():
             inner_writer(batch_df, batch_id)
@@ -176,6 +178,30 @@ def with_gx_gate(inner_writer: Callable[[DataFrame, int], None], table: str) -> 
                 topic=f"{table}_dlq",
                 error_stage="gx_validation",
             )
+        if gx_runner is not None:
+            # Pass the pre-gate batch (not `valid`) so per-expectation success
+            # ratios reflect the true population, including rows the gate
+            # dropped. Failures are swallowed inside the runner.
+            gx_runner.validate_and_persist(batch_df, table)
         inner_writer(valid, batch_id)
 
     return wrapped
+
+
+def _build_gx_runner_if_enabled():
+    """Return a `GxSuiteRunner` when `ENABLE_GX_DATA_DOCS=1`, else None.
+
+    Import is lazy so environments without the `gx-docs` extra installed
+    (the default) never touch `great_expectations`.
+    """
+    if os.getenv("ENABLE_GX_DATA_DOCS", "0") != "1":
+        return None
+    try:
+        from src.governance.gx_runner import GxSuiteRunner
+    except ImportError as exc:
+        logger.warning("ENABLE_GX_DATA_DOCS=1 but gx_runner unavailable: %s", exc)
+        return None
+    return GxSuiteRunner(
+        project_dir=os.getenv("GX_PROJECT_DIR", "/opt/gx/"),
+        textfile_dir=os.getenv("GX_TEXTFILE_DIR", "/opt/gx/textfile/"),
+    )

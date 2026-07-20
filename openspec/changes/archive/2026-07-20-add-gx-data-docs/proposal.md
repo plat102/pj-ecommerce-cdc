@@ -12,9 +12,9 @@ Great Expectations proper ships an answer to all of these — **Data Docs**, bro
 ## What Changes
 
 - Add a `GxSuiteRunner` in `data-platform/streaming/spark/src/governance/gx_runner.py` that runs the *real* Great Expectations engine (via `SparkDFDataset`) on every micro-batch and persists a `ValidationResult` to the GX validations store. Runs alongside the inline gate — never replaces it. Opt-in via `ENABLE_GX_DATA_DOCS=1` (default off) so the ~200MB GX dep stays optional.
-- Add a `great_expectations.yml` under `data-platform/governance/gx/` declaring stores (`expectations_store`, `validations_store`, `checkpoint_store`) backed by the filesystem at `/opt/gx/` inside the Spark container (bind-mounted from `data-platform/governance/gx-runtime/` on the host). GX rebuilds the Data Docs site into `/opt/gx/data-docs/` after each validation.
+- Add a `great_expectations.yml` under `data-platform/governance/gx-runtime/` declaring stores (`expectations_store`, `validations_store`, `checkpoint_store`) backed by the filesystem at `/opt/gx/` inside the Spark container (bind-mounted from `data-platform/governance/gx-runtime/` on the host). GX rebuilds the Data Docs site into `/opt/gx/uncommitted/data_docs/local_site/` after each validation.
 - Add an `nginx:alpine` sidecar container `gx-data-docs-server` that serves the built site at `http://localhost:8890`. New compose file `docker-compose.gx-docs.yml` (opt-in — not in `make up` by default; adds ~10MB and a port).
-- Add a small Prometheus text-collector script `scripts/gx_metrics_exporter.py` that reads the latest `ValidationResult` JSONs, computes per-suite / per-expectation success ratios, and writes a Prometheus text-format file that node-exporter picks up via its `textfile_collector` directory. Metric names: `gx_suite_success_ratio{table,suite}`, `gx_expectation_success_ratio{table,expectation_type,column}`.
+- Emit Prometheus metrics via node-exporter's `textfile_collector`: the runner writes a `gx.prom` file (containing per-suite / per-expectation success ratios) into a bind-mount shared with `node-exporter`, which picks it up on its next scrape. Wire the flag `--collector.textfile.directory=/etc/textfile_collector` into the node-exporter service (not currently enabled). Metric names: `gx_suite_success_ratio{table,suite}`, `gx_expectation_success_ratio{table,expectation_type,column}`.
 - Extend the existing Grafana `Data Governance Overview` dashboard (from `add-data-governance` Phase 3) with 2 new panels: "GX Suite Success Rate (24h)" and "Top 5 Failing Expectations". Include panel links pointing at the Data Docs site.
 - Add `docs/data-governance.md` (if absent) or extend `docs/observability.md` with a "GX Data Docs" section explaining opt-in, the localhost:8890 site, and how to interpret per-expectation success ratios vs the row-level DLQ.
 
@@ -32,9 +32,9 @@ Great Expectations proper ships an answer to all of these — **Data Docs**, bro
 
 **New code**:
 - `data-platform/streaming/spark/src/governance/gx_runner.py` (the real-GX pass)
-- `data-platform/governance/gx/great_expectations.yml` (project config)
-- `data-platform/governance/gx/expectations/` — GX-format suite files converted from the 3 existing JSON suites (`{table}_cdc_suite.json`) into the GX-canonical format
-- `scripts/gx_metrics_exporter.py` (Prometheus text collector, cron-driven from host or invoked on each batch)
+- `data-platform/governance/gx-runtime/great_expectations.yml` (project config)
+- `data-platform/governance/gx-runtime/expectations/` — GX-format suite files converted from the 3 existing JSON suites (`{table}_cdc_suite.json`) into the GX-canonical format
+- `scripts/gx_convert_suites.py` (one-off convertor: inline JSON suite → GX canonical format)
 - `infrastructure/docker/docker-compose.gx-docs.yml` (nginx sidecar)
 - `infrastructure/docker/gx-docs/nginx.conf` (thin static-file server config)
 - `infrastructure/docker/grafana/provisioning/dashboards/files/data-governance/data-governance-overview.json` — updated with 2 new panels
@@ -43,7 +43,7 @@ Great Expectations proper ships an answer to all of these — **Data Docs**, bro
 - `Makefile` — add `COMPOSE_GX_DOCS`, `up-gx-docs`, `down-gx-docs`, `logs-gx-docs`, `sh-gx-docs` targets (mirroring `up-governance` pattern)
 - `data-platform/streaming/spark/src/governance/quality.py` — add call site for `GxSuiteRunner.validate_and_persist` inside `with_gx_gate`, gated by `ENABLE_GX_DATA_DOCS=1`
 - `data-platform/streaming/spark/src/config/app_config.py` — add `GxDataDocsConfig` reading `ENABLE_GX_DATA_DOCS`, `GX_PROJECT_DIR`
-- `pyproject.toml` — bump `great_expectations` to a pinned version + add `great_expectations[spark]` extra
+- `pyproject.toml` — add a project-local optional-dependency extra named `gx-docs` that pins `great_expectations[spark] == 0.18.19` (opt-in; the ~200MB dep stays out of the default env)
 - `.env.example` — `ENABLE_GX_DATA_DOCS` placeholder + one-line doc
 
 **Runtime behavior**:

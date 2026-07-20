@@ -1,0 +1,88 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "customers_cdc",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "id"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_of_type",
+      "kwargs": {
+        "column": "id",
+        "type_": "IntegerType"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "_version"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "_version"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "_version",
+        "max_value": 4102444800000,
+        "min_value": 1577836800000
+      },
+      "meta": {
+        "why": "Sanity range for Debezium ts_ms: 2020-01-01 through 2100-01-01"
+      }
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": {
+        "column": "_deleted"
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "_deleted",
+        "value_set": [
+          0,
+          1
+        ]
+      },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "kwargs": {
+        "column": "email",
+        "max_value": 64,
+        "min_value": 64,
+        "mostly": 0.99
+      },
+      "meta": {
+        "why": "SHA-256 hex digest length; NULL rows for op=d are excluded via mostly"
+      }
+    }
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19",
+    "notes": "Applied to each Spark micro-batch of pg.public.customers CDC events after transform, before ClickHouse write. Failures route to customers_dlq."
+  }
+}

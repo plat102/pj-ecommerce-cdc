@@ -12,6 +12,7 @@ COMPOSE_SPARK := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.spark.yml
 COMPOSE_ANALYTICS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.analytics.yml
 COMPOSE_GOVERNANCE := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.governance.yml
 COMPOSE_OBS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.observability.yml
+COMPOSE_GX_DOCS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.gx-docs.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
@@ -30,6 +31,7 @@ export $(shell sed 's/=.*//' $(ENV_FILE))
         up-spark down-spark logs-spark status-spark sh-spark-master \
         restart-spark spark-shell pyspark-shell spark-submit jupyter-token \
         up-analytics down-analytics logs-analytics grafana-url clickhouse-client \
+        up-gx-docs down-gx-docs logs-gx-docs sh-gx-docs \
         migrate-governance
 
 help: ## Show this help message
@@ -301,6 +303,23 @@ logs-governance: ## Show OpenMetadata logs
 
 status-governance: ## Show OpenMetadata stack status
 	$(COMPOSE_GOVERNANCE) ps
+
+#=====================================================
+# --- GX Data Docs (nginx sidecar) -------------------
+#=====================================================
+
+up-gx-docs: ## Start GX Data Docs static site at http://localhost:8890
+	@mkdir -p data-platform/governance/gx-runtime/uncommitted/data_docs/local_site
+	$(COMPOSE_GX_DOCS) up -d
+
+down-gx-docs: ## Stop GX Data Docs static site
+	$(COMPOSE_GX_DOCS) down --remove-orphans
+
+logs-gx-docs: ## Show GX Data Docs nginx logs
+	$(COMPOSE_GX_DOCS) logs -f
+
+sh-gx-docs: ## Open a shell in the GX Data Docs nginx container
+	$(COMPOSE_GX_DOCS) exec gx-data-docs-server sh
 
 #=====================================================
 # --- Observability (Loki + Prometheus + Alloy) ------

@@ -161,3 +161,13 @@ The bump is transient. The next `make up` (without the env var set) drift-correc
 - `curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | {job, health}]'` — expect all Phase 1/2 jobs `up` (except `spark` when no CDC job is running).
 - `curl -s http://localhost:3100/loki/api/v1/labels` — label set should be `{container, image, compose_service, stream}` only.
 - Grafana → Alerting → the `observability` folder should list all five infra rules plus `cdc_freshness_10min_slo`.
+
+## GX Data Docs (opt-in)
+
+Great Expectations proper runs as a second-pass reporter alongside the inline gate in `quality.py`. It never influences which rows land in ClickHouse; the inline gate remains the authoritative row-drop decision. The second pass produces two things: a browseable HTML **Data Docs** site (per-suite, per-batch, per-expectation) and two Prometheus gauges (`gx_suite_success_ratio`, `gx_expectation_success_ratio`) surfaced on the Grafana `Data Governance Overview` dashboard.
+
+**Enable it:** set `ENABLE_GX_DATA_DOCS=1` before starting a CDC job (`ENABLE_GX_GATE=1 ENABLE_GX_DATA_DOCS=1 make cdc-run-products-prod`), then `make up-gx-docs` to bring up the nginx sidecar at [http://localhost:8890](http://localhost:8890). Requires the `gx-docs` extra: `uv sync --extra gx-docs`.
+
+**How to read the two signals side-by-side:** the row-level DLQ (`{table}_cdc_dlq` on Kafka, plus the Streamlit DLQ Triage view) tells you *which rows* the gate dropped; the GX per-expectation success ratio tells you *which expectation* is the current worst offender across the batch. For a failing `expect_column_values_to_be_between(price, 0, 1000000)`, DLQ shows the offending rows and GX shows the batch-level pass rate — check both when tuning a suite.
+
+**Off by default:** `make up` never starts the sidecar and the runner skips the GX import when `ENABLE_GX_DATA_DOCS` is unset. The Data Docs directory (`data-platform/governance/gx-runtime/uncommitted/data_docs/`) and the runner's validations store are both git-ignored — regenerable from each new batch.

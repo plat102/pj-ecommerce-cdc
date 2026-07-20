@@ -38,7 +38,7 @@ Alternative rejected: swap the inline gate for real GX entirely. Would eliminate
 batch_df ──▶ _validate_with_gx (inline)  ──┬──▶ valid_df ──▶ ClickHouse
                                             └──▶ invalid_df ──▶ DLQ
 
-  (concurrent, when ENABLE_GX_DATA_DOCS=1:)
+  (sequential, same driver thread, when ENABLE_GX_DATA_DOCS=1:)
                             ▼
               GxSuiteRunner.validate_and_persist(batch_df)
                             ▼
@@ -50,6 +50,8 @@ batch_df ──▶ _validate_with_gx (inline)  ──┬──▶ valid_df ─�
 Rationale for running GX on `batch_df` (the pre-gate df), not `valid_df`:
 - We want GX's per-expectation success ratio to reflect the *actual* population, including the rows the gate is about to drop. Otherwise every ratio would show 100% (the gate already filtered failures out).
 - Cost: GX re-does work the inline gate did. Accepted: this is opt-in observability, latency is not on the critical path.
+
+**Call-site contract**: `with_gx_gate` retains a reference to the original `batch_df` (the DataFrame it received as input) and passes *that* to `GxSuiteRunner.validate_and_persist`, not `valid_df`. The runner call happens *after* the inline gate's `valid_df`/`invalid_df` split so that any inline-gate exceptions surface first, but the DataFrame handed to GX is always the pre-gate population.
 
 ### D2. Filesystem-backed stores, bind-mounted
 
@@ -76,12 +78,17 @@ The nginx image is amd64+arm64 native so no `platform:` pin needed.
 
 ### D4. Prometheus metrics via textfile collector
 
-Instead of standing up yet-another exporter, reuse `node-exporter`'s existing `--collector.textfile.directory=/etc/textfile_collector` mount (already declared in `docker-compose.observability.yml`). `scripts/gx_metrics_exporter.py` runs opportunistically:
+Instead of standing up yet-another exporter, extend the existing `node-exporter` service (in `docker-compose.observability.yml`) with the `textfile` collector, then have the runner drop a `gx.prom` file that node-exporter picks up on its next scrape.
 
-- Either as a cron inside the Spark container (`ENABLE_GX_DATA_DOCS=1` → a background thread in the runner that writes `gx.prom` every 30s), or
-- As a periodic hook invoked from within `GxSuiteRunner.validate_and_persist` after each batch (simpler, no threading).
+**Shared bind-mount** (both containers see the same directory):
+- Host path: `data-platform/governance/gx-runtime/textfile/`
+- Spark container: mounted at `/opt/gx/textfile/` — the runner writes `gx.prom` here.
+- node-exporter container: mounted at `/etc/textfile_collector/` — read-only.
+- node-exporter `command:` gains `--collector.textfile.directory=/etc/textfile_collector`.
 
-Choosing the second — write `/etc/textfile_collector/gx.prom` at the end of every validate call. Contents:
+Both the compose change (add `--collector.textfile.directory` flag + the read-only mount to node-exporter) and the Spark-side write path are part of this change; the current node-exporter service does *not* yet have the textfile collector wired up.
+
+The write happens **inline** at the end of every `GxSuiteRunner.validate_and_persist` call — no threading, no cron. Contents:
 
 ```
 # HELP gx_suite_success_ratio Fraction of expectations that passed in the latest ValidationResult per suite.
@@ -121,9 +128,9 @@ Alternative rejected: separate dedicated dashboard. The existing "Data Governanc
 
 ### D7. Package version pinning
 
-`great_expectations = "0.18.19"` (latest of the 0.18 line at time of writing). Pinning matters here because GX 1.x rewrote the whole checkpoint / datasource API, and this design is written against 0.18's `SparkDFDataset`. A future `add-gx-1x-upgrade` change handles the transition when we're ready.
+`great_expectations[spark] == 0.18.19` (latest of the 0.18 line at time of writing), declared in a project-local uv optional-dependency extra named `gx-docs`. Install with `uv sync --extra gx-docs`. Pinning matters here because GX 1.x rewrote the whole checkpoint / datasource API, and this design is written against 0.18's `SparkDFDataset`. A future `add-gx-1x-upgrade` change handles the transition when we're ready.
 
-`great_expectations[spark]` extra pulls in the Spark integration; `spark = "3.5.0"` is already vendored.
+The `[spark]` marker pulls in GX's Spark integration; `spark = "3.5.0"` is already vendored.
 
 ## Risks / Trade-offs
 

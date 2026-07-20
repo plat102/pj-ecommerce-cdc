@@ -116,9 +116,13 @@ services:
       - --path.procfs=/host/proc
       - --path.sysfs=/host/sys
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      # GX runner (spark container) writes gx.prom to the same host dir
+      # mounted here read-only; picked up on next scrape.
+      - --collector.textfile.directory=/etc/textfile_collector
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - ../../data-platform/governance/gx-runtime/textfile:/etc/textfile_collector:ro
     networks:
       - ecommerce-network
 

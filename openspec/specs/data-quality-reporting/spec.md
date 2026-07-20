@@ -1,5 +1,8 @@
-## ADDED Requirements
+# data-quality-reporting Specification
 
+## Purpose
+TBD - created by archiving change add-gx-data-docs. Update Purpose after archive.
+## Requirements
 ### Requirement: gx-real-engine-runner
 When `ENABLE_GX_DATA_DOCS=1` is set for a Spark CDC job, the job SHALL run a second-pass validation via the real Great Expectations engine (`SparkDFDataset`, pinned to `great_expectations>=0.18,<0.19`) on every micro-batch, in addition to the inline gate. The GX runner SHALL be invoked with the pre-gate DataFrame (so per-expectation success ratios reflect the actual population, including rows the gate is about to drop). The GX runner SHALL NOT influence the row-drop decision; the inline gate remains the authoritative gate.
 
@@ -13,7 +16,7 @@ When `ENABLE_GX_DATA_DOCS=1` is set for a Spark CDC job, the job SHALL run a sec
 - **THEN** `great_expectations` SHALL NOT be imported by the Spark job (verified by no GX log lines and no writes to `gx-runtime/uncommitted/`)
 
 ### Requirement: gx-validation-store-filesystem
-Every `ValidationResult` produced by the GX runner SHALL be persisted to a filesystem-backed store rooted at `/opt/gx/uncommitted/validations/<suite_name>/` inside the Spark container, which SHALL be bind-mounted from `data-platform/governance/gx-runtime/uncommitted/validations/` on the host so results survive container restarts. The GX project configuration SHALL live at `data-platform/governance/gx/great_expectations.yml` and declare `TupleFilesystemStoreBackend` for `expectations_store`, `validations_store`, and `checkpoint_store`.
+Every `ValidationResult` produced by the GX runner SHALL be persisted to a filesystem-backed store rooted at `/opt/gx/uncommitted/validations/<suite_name>/` inside the Spark container, which SHALL be bind-mounted from `data-platform/governance/gx-runtime/uncommitted/validations/` on the host so results survive container restarts. The GX project configuration SHALL live at `data-platform/governance/gx-runtime/great_expectations.yml` (co-located with the store root, so `/opt/gx/great_expectations.yml` inside the container) and declare `TupleFilesystemStoreBackend` for `expectations_store`, `validations_store`, and `checkpoint_store`.
 
 #### Scenario: validation persists after container restart
 - **WHEN** a validation runs, then the Spark container is restarted
@@ -35,7 +38,7 @@ An HTTP site SHALL serve the compiled GX Data Docs at `http://localhost:8890`. T
 - **THEN** no `gx-data-docs-server` container SHALL appear in `docker ps`
 
 ### Requirement: gx-prometheus-metrics-textfile
-The GX runner SHALL write a Prometheus text-format file at `/etc/textfile_collector/gx.prom` (bind-mounted from `data-platform/governance/gx-runtime/textfile/gx.prom`) at the tail of every validation call, exposing metrics `gx_suite_success_ratio{table,suite}` and `gx_expectation_success_ratio{table,expectation_type,column}`. Node-exporter (already present from `add-infra-observability`) SHALL pick these up via its `textfile_collector` directory and Prometheus SHALL scrape them via the existing node-exporter job.
+The GX runner SHALL write a Prometheus text-format file at `/opt/gx/textfile/gx.prom` (host path: `data-platform/governance/gx-runtime/textfile/gx.prom`) at the tail of every validation call, using an atomic write (temp file + rename) to avoid partial reads. The metrics exposed SHALL be `gx_suite_success_ratio{table,suite}` and `gx_expectation_success_ratio{table,expectation_type,column}`. The `node-exporter` service (from `add-infra-observability`) SHALL be extended by this change: (a) its `command:` gains `--collector.textfile.directory=/etc/textfile_collector`, and (b) the same host directory `data-platform/governance/gx-runtime/textfile/` SHALL be bind-mounted read-only at `/etc/textfile_collector/` on `node-exporter`. Prometheus SHALL then scrape these metrics via the existing node-exporter job.
 
 #### Scenario: metrics visible in Prometheus
 - **WHEN** a validation has completed successfully with `ENABLE_GX_DATA_DOCS=1`
@@ -52,3 +55,4 @@ Suites SHALL exist in two representations during the transition period: the inli
 - **WHEN** an operator edits a suite JSON at the inline-gate path and runs `python scripts/gx_convert_suites.py`
 - **THEN** the corresponding GX-format file SHALL be regenerated with the same expectations set
 - **AND** re-running the convertor SHALL produce a byte-identical output (idempotent)
+
