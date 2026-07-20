@@ -29,7 +29,8 @@ export $(shell sed 's/=.*//' $(ENV_FILE))
         up-db down-db up-kafka down-kafka sh-pg \
         up-spark down-spark logs-spark status-spark sh-spark-master \
         restart-spark spark-shell pyspark-shell spark-submit jupyter-token \
-        up-analytics down-analytics logs-analytics grafana-url clickhouse-client
+        up-analytics down-analytics logs-analytics grafana-url clickhouse-client \
+        migrate-governance
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -276,8 +277,21 @@ clickhouse-client: ## Connect to ClickHouse client
 # --- Governance Catalog (OpenMetadata) --------------
 #=====================================================
 
-up-governance: ## Start OpenMetadata + MySQL + Elasticsearch (heavy ~4GB RAM)
+up-governance: ## Start OpenMetadata + MySQL + Elasticsearch (heavy ~4GB RAM). Run `migrate-governance` once on first boot.
 	$(COMPOSE_GOVERNANCE) up -d
+
+migrate-governance: ## Bootstrap OpenMetadata schema in MySQL (run once, or after OPENMETADATA_VERSION bump)
+	docker run --rm --network ecommerce-network \
+	  -e DB_DRIVER_CLASS=com.mysql.cj.jdbc.Driver \
+	  -e DB_SCHEME=mysql -e DB_USE_SSL=false \
+	  -e DB_HOST=openmetadata-mysql -e DB_PORT=3306 \
+	  -e DB_USER=openmetadata_user -e DB_USER_PASSWORD=openmetadata_password \
+	  -e OM_DATABASE=openmetadata_db \
+	  -e ELASTICSEARCH_HOST=openmetadata-elasticsearch -e ELASTICSEARCH_PORT=9200 -e ELASTICSEARCH_SCHEME=http \
+	  -e SERVER_PORT=8585 -e SERVER_ADMIN_PORT=8586 \
+	  docker.getcollate.io/openmetadata/server:$(or $(OPENMETADATA_VERSION),1.5.9) \
+	  ./bootstrap/openmetadata-ops.sh migrate
+	docker restart openmetadata-server
 
 down-governance: ## Stop OpenMetadata stack
 	$(COMPOSE_GOVERNANCE) down --remove-orphans
