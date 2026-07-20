@@ -18,6 +18,16 @@ The existing type mismatches are **intentional** and must survive contract adopt
 
 A contract format must express these deliberate transformations, not flag them as drift.
 
+**The reconciliation gap.** With `add-om-ingestion` and `add-spark-openlineage` in flight, the pipeline will soon have three overlapping views of the *same* table graph:
+
+| View | Source | Update cadence | What it claims |
+|---|---|---|---|
+| Contract (this change) | Hand-written YAML | PR-time | Declared intent (columns, types, PII, ownership) |
+| OpenMetadata catalog | `make ingest-all` (on-demand) | Manual / CI-triggered | Observed schema as scraped from live Postgres + ClickHouse |
+| GX suites | Hand-written JSON | PR-time | Runtime quality expectations, batch-checked |
+
+DE and DA both consult these views when re-checking data. Without cross-checks, all three can drift independently — three sources of truth means zero. This change closes the schema half of the gap: the drift test treats OM's ingested view as a fifth layer, so a contract change that isn't reflected in OM (because `ingest-all` wasn't re-run) is a PR-blocking signal. The *semantic* half of the gap (contract PII annotations ↔ GX expectation shapes) is explicitly deferred — see Decision 11.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -33,7 +43,8 @@ A contract format must express these deliberate transformations, not flag them a
 - Full Avro/Kafka wire-format validation. Apicurio remains the runtime authority for Kafka payload shape; the contract references topic names only.
 - Contract versioning, BACKWARD/FORWARD compatibility rules, schema evolution semantics. Overkill for 3 tables and 1 producer.
 - ClickHouse `Decimal` precision/scale exact match. Phase 1+2 compares logical type family (`decimal`), not `(10,2)` specifically.
-- OpenMetadata integration (ingest contract → publish to catalog). Deferred; contracts are readable enough on their own.
+- **Publishing contracts INTO OpenMetadata** (`datacontract publish` → OM catalog entry). Deferred. This change reads FROM OM to cross-check the observed schema against the declared contract; it does not push contract metadata into OM.
+- **Contract ↔ GX semantic reconciliation.** Checking that a contract PII annotation (e.g., `pii=hash`) is matched by a corresponding GX expectation (e.g., `regex_matches` on `^[a-f0-9]{64}$`) requires a project-local PII vocabulary that does not exist yet. Deferred to a follow-up change once we have more than three tables and two PII columns to inform the mapping. See Decision 11.
 
 ## Decisions
 
@@ -162,6 +173,47 @@ No new Make target. Pytest auto-collects `tests/contracts/`, and `make test` alr
 
 First-run of the drift test against current code may reveal already-existing drift or unannotated intentional differences. The change includes a task to **run the test, fix any surprises, and commit the resulting contract files plus any minor DDL/Spark-schema corrections**. The contract's initial content is derived from current code, not from a wish list.
 
+### Decision 10: OpenMetadata as a fifth layer with soft-fail semantics
+
+**Choice:** Extend the drift test to treat the OM catalog as a fifth layer, cross-checked via `GET /api/v1/tables/name/{fqn}`. Unlike the four DDL/GX layers (hard gates), the OM check **soft-fails** — logs a diagnostic and skips when OM is unreachable, rather than failing `make test`. A CI hook re-runs `make ingest-all` whenever `init.sql` or `create_tables.sql` changes in a PR, so OM's view is fresh before the drift test runs.
+
+**Rationale:**
+- **The reconciliation gap requires OM to be a live participant, not a downstream consumer.** If OM is only fed from ingestion and never cross-checked, it silently drifts from the contract — exactly the "three sources of truth = zero" failure mode this change is meant to prevent.
+- **Soft-fail on unreachable OM keeps `make test` runnable on dev laptops.** OM requires the governance stack (`make up-governance`), which many contributors won't have running. Making OM a hard gate would force a heavyweight dependency on every test run. The four DDL/GX layers are all parseable from files on disk with no running services, so they stay hard gates.
+- **CI ingest hook prevents a race.** Without it, an author could update `init.sql`, run `make test` locally (drift test passes against static files), push, and the CI-side OM check would fail because OM's cached view is stale. Re-running `ingest-all` in CI when schema files change makes the OM layer meaningful rather than a false-positive generator.
+
+**Parser shape:**
+- `parse_om_table(fqn: str, client: OMClient) -> list[Column] | None` — returns `None` (with a logged reason) when OM is unreachable. `None` triggers `pytest.skip()` for that parametrization; a non-`None` result triggers the same column-name + type comparison as the other layers.
+- Table FQNs: `ecommerce-postgres.public.customers` (source) and `ecommerce-clickhouse.ecommerce_analytics.customers_cdc` (sink) — matches the service names declared in `add-om-ingestion` ingestion YAMLs.
+- OM client is a ~30-line wrapper around `httpx` (transitive dep of `datacontract-cli`); no new top-level dependency.
+
+**CI hook (workflow surface):**
+- If GHA is the CI: `.github/workflows/ingest-on-schema-change.yml` triggers on `paths: [infrastructure/docker/postgres/init.sql, infrastructure/docker/clickhouse/create_tables.sql]`, spins up the governance stack, and runs `make ingest-all` before `make test`.
+- If the repo isn't on GHA yet, the same idea lives in whatever CI is used (documented in `docs/governance.md`).
+- Locally, contributors can `make up-governance && make ingest-all` before `make test` to get the OM-layer check to run against a live catalog. Otherwise it silently skips.
+
+**Alternatives considered:**
+- **Make OM a hard gate.** Rejected. Kills local dev ergonomics for one added check.
+- **Skip OM entirely, keep four layers.** Rejected. This is exactly the Option A "name-the-gap-and-do-nothing" that lets the three-views-drift problem grow.
+- **Publish contract INTO OM (`datacontract publish`) instead of reading from it.** Deferred. Publishing makes the contract *authoritative in the catalog*; reading makes OM a *witness* against the contract. For Phase 1+2, witness is what closes the gap. Publish is a Phase 3 concern alongside code generation.
+
+### Decision 11: Defer contract ↔ GX semantic reconciliation
+
+**Choice:** The drift test's GX check remains a *coverage-only* lower bound (see Decision 6). No enforcement that contract PII annotations translate to specific GX expectation shapes. Deferred to a follow-up (`add-contract-pii-vocab` or similar).
+
+**Why now would be premature:**
+- **The vocabulary doesn't exist.** ODCS `customProperties` are freeform. "If `pii.classification=sensitive` then GX must have expectation X" requires a project-local mapping — and today we have exactly two PII columns (`customers.name`, `customers.email`) with two `sink.transformation` values (`sha256_salted`, `tokenize_first_initial`). That's not enough distinct cases to design a mapping without over-fitting.
+- **DE and DA need to agree on the terms before enforcement.** Locking in a vocabulary now, before the audiences that consume it have written contracts for their own use cases, produces a mapping that's convenient for the change author and inconvenient for everyone else.
+- **The schema half is the big win.** Column drift is the failure mode that silently loses data. Semantic PII drift (e.g., forgot to add a hash-shape check) is caught by GX runtime failures or by a manual audit — painful but not silent. Prioritizing schema over semantics matches actual impact.
+
+**What the follow-up would look like:**
+- Freeze a PII vocabulary in `docs/governance.md` (e.g., `pii.classification ∈ {sensitive, quasi-identifier, public}`; `sink.transformation ∈ {sha256_salted, tokenize_first_initial, mask_last4, drop}`).
+- Add a mapping table in `tests/contracts/parsers.py`: `SEMANTIC_MAP: dict[transformation, GXExpectationKind]`.
+- Extend the drift test with a new parametrization that asserts, for each PII-annotated column, that the GX suite has an expectation of the mapped kind.
+- Once the mapping is stable across ~10+ tables' worth of contracts, consider moving semantic checks from drift-test to a proper linter.
+
+**Escape valve if this bites sooner than expected:** any DE/DA can open a follow-up change proposal describing the specific pain — a real case beats a hypothetical vocabulary every time.
+
 ## Risks / Trade-offs
 
 - **[Risk]** Contract diverges from ODCS spec as the standard evolves (v3.2, v4).
@@ -184,17 +236,22 @@ First-run of the drift test against current code may reveal already-existing dri
 
 ## Migration Plan
 
+**Prerequisite:** `add-om-ingestion` MUST be archived first. The OM cross-check depends on `make ingest-all` existing and the governance stack being reachable. If `add-om-ingestion` is delayed, this change can still land — the OM layer will soft-fail everywhere until ingestion is available, degrading gracefully to the four-layer check.
+
 **Rollout (single PR):**
 1. Add contracts + drift test + Makefile untouched (test picked up automatically).
-2. Run `make test` locally. Fix any drift surfaced (either update the code to match contract, or update contract to match code — decide per column, favoring the sink DDL as it's the analytical contract).
-3. Commit contracts + test + any corrections.
+2. Bring up governance stack: `make up-governance && make ingest-all` (from `add-om-ingestion`). Populates OM with observed schema.
+3. Run `make test` locally. Fix any drift surfaced (either update the code to match contract, or update contract to match code — decide per column, favoring the sink DDL as it's the analytical contract). If OM diverges from contract, re-run `make ingest-all` or update the contract.
+4. Commit contracts + test + CI ingest-on-schema-change hook + any corrections.
 
 **Rollback:**
 - Delete `data-platform/governance/contracts/` and `tests/contracts/`. No runtime dependency; no data migration; no state cleanup.
 - Remove `datacontract-cli` and `sqlglot` from `pyproject.toml` `dev` group.
+- Remove the CI ingest-on-schema-change hook (self-contained workflow file).
 
 ## Open Questions
 
 - **Should the contract declare `_dlq` topics as related outputs?** Deferred. DLQ topology is documented in `docs/governance.md`; adding it to the contract couples two orthogonal concerns.
-- **Should we publish contracts to OpenMetadata via `datacontract publish`?** Nice-to-have, deferred to a follow-up change (`add-openmetadata-contract-ingest` or similar). Requires OM to be running, which contradicts its "optional" stance in the current stack.
+- **Should we publish contracts to OpenMetadata via `datacontract publish`?** Deferred to Phase 3. This change makes OM a *witness* against the contract (read-only cross-check); publishing would make the contract *authoritative in the catalog* — a bigger change with implications for OM's UI and downstream tooling.
 - **Precision/scale strictness for `Decimal`?** Phase 1+2 checks logical type only. If we grow to more `NUMERIC` columns with varying precision, tightening becomes worth the effort.
+- **When to freeze the PII vocabulary?** See Decision 11. The trigger will be either (a) DE or DA writing a contract and hitting a case the current freeform annotations can't express, or (b) accumulated table count crossing a threshold where ad-hoc annotations become unmanageable (rough guess: ~8–10 tables).

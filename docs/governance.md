@@ -103,6 +103,70 @@ Base class: `data-platform/streaming/spark/src/jobs/base_cdc_job.py`.
 - **OpenLineage** Spark listener is gated by `ENABLE_OPENLINEAGE=1`; when on, Spark emits lineage events for each streaming query.
 - Column-level documentation lives in `COMMENT` clauses inside `infrastructure/docker/clickhouse/create_tables.sql`.
 
+### Populate the catalog
+
+`make up-governance` brings the OpenMetadata stack online, but the catalog at http://localhost:8585 lands empty — no database services, no messaging services, no tables. Populate it on demand:
+
+```
+make up-governance        # first-time only; also: make migrate-governance
+make ingest-all           # ~90s on a warm ingestion image; runs pg → kafka → clickhouse fail-fast
+make ingest-status        # prints service counts (expect 2 database, 1 messaging, 0 pipeline)
+```
+
+Individual targets: `make ingest-pg`, `make ingest-kafka`, `make ingest-clickhouse`.
+
+**Ingestion is idempotent** — re-running any target updates existing entries in place rather than creating duplicates. Safe to schedule from CI on every schema-affecting PR.
+
+Ingestion runs via an ephemeral `docker run --rm openmetadata/ingestion:1.5.9` container joined to `ecommerce-network`. No host `pip install`, no long-running scheduler container. The YAMLs under `data-platform/governance/openmetadata/ingestion/` reference `${OM_INGESTION_JWT}` and `${CLICKHOUSE_PASSWORD}` via env expansion — both are propagated from your `.env` into the ingestion container by the Makefile.
+
+**Filters:** the YAMLs restrict ingestion to the three CDC tables (`customers`, `products`, `orders` in Postgres; `*_cdc` + `*_dlq` in ClickHouse) and the CDC topic prefix (`pg.public.*`, `governance.*`, `.*_dlq` in Kafka). Widen the filters when the pipeline grows.
+
+### Obtain the ingestion JWT
+
+OM 1.5.9 signs JWTs with per-install RSA keys, so there is no well-known default. Grab the long-lived `ingestion-bot` JWT once and paste it into `infrastructure/docker/.env` as `OM_INGESTION_JWT=…`.
+
+**Option A — UI:**
+1. Log into http://localhost:8585 as `admin@open-metadata.org` / `admin` (default basic-auth credentials; change these before exposing OM beyond localhost).
+2. Settings → Bots → `ingestion-bot` → **Revoke/Regenerate JWT Token** → copy the token.
+3. Paste into `.env` as `OM_INGESTION_JWT=<paste>`.
+
+**Option B — CLI (scriptable):**
+```
+# 1. Log in as admin; the password below is the default OM basic-auth admin password (base64 "admin").
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8585/api/v1/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@open-metadata.org", "password": "YWRtaW4="}' | jq -r .accessToken)
+
+# 2. Look up the bot user id, then read its authenticationMechanism.
+BOT_ID=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8585/api/v1/bots/name/ingestion-bot | jq -r .botUser.id)
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8585/api/v1/users/$BOT_ID?fields=authenticationMechanism" \
+  | jq -r .authenticationMechanism.config.JWTToken
+```
+
+The token has a multi-year expiry by default. Rotate by regenerating in the UI (Option A step 2) or by PUT-ing a new authentication mechanism (out of scope here).
+
+### After ingestion
+
+Expect the OM Explore page to show:
+
+- **Databases → `ecommerce-postgres`** — schema `public` with tables `customers`, `products`, `orders`
+- **Databases → `ecommerce-clickhouse`** — schema `ecommerce_analytics` with `*_cdc` tables and DLQ tables
+- **Messaging → `ecommerce-kafka`** — topics `pg.public.*` (CDC), `governance.*`, `*_dlq`
+
+Lineage tab is empty until the Spark OpenLineage listener is enabled (see `add-spark-openlineage`).
+
+Some OM surfaces stay empty until you trigger them or use the UI — this is not a bug in the ingestion:
+
+| OM surface | Why it's empty right after `ingest-all` | How to populate |
+|---|---|---|
+| **Explore → Databases / Messaging** | (n/a — populates immediately) | (n/a) |
+| **Insights → Data Assets / KPIs** | Powered by a scheduled aggregation job, not a live view | Settings → Applications → **DataInsightsApplication** → Run Now (or wait for the daily schedule) |
+| **Insights → App Analytics** | Event-driven from real user page-views in OM Explore | Click around Explore as a user — views accumulate over time |
+| **Explore → Dashboards** | No Grafana ingestion is configured in this change | Deferred to a future change (`add-om-grafana-ingestion` or similar) |
+| **Table → Lineage tab** | Requires Spark's OpenLineage listener to emit events | Enable via `add-spark-openlineage` (blocked on this change) |
+
 ## Where to look
 
 | Thing | Path |

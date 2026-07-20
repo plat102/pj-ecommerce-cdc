@@ -11,8 +11,7 @@ source:
       type: Clickhouse
       hostPort: clickhouse:8123
       username: default
-      authType:
-        password: ${CLICKHOUSE_PASSWORD}
+      password: ${CLICKHOUSE_PASSWORD}
       databaseSchema: ecommerce_analytics
   sourceConfig:
     config:

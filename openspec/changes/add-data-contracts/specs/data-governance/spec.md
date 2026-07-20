@@ -68,6 +68,41 @@ A pytest-driven drift test at `tests/contracts/test_schema_drift.py` SHALL, for 
 - **AND** the corresponding GX suite at `data-platform/governance/expectations/{table}_cdc_suite.json` does not contain an `expect_column_values_to_not_be_null` expectation on `id`
 - **THEN** the drift test SHALL fail with a message identifying the missing expectation
 
+### Requirement: contract-om-catalog-reconciliation
+
+The drift test SHALL treat the OpenMetadata catalog as a fifth reconciliation layer, cross-checked via `GET /api/v1/tables/name/{fqn}` on the OM server (default `http://localhost:8585`, overridable via `OM_BASE_URL` env). For each contract, two OM checks SHALL run: one against the source FQN (`ecommerce-postgres.public.{table}`) and one against the sink FQN (`ecommerce-clickhouse.ecommerce_analytics.{table}_cdc`), matching the service names declared in the `add-om-ingestion` ingestion YAMLs.
+
+Unlike the four DDL/GX layers, OM-layer checks SHALL soft-fail — when the OM server is unreachable, returns 404, or returns a 401/403 authentication error, the corresponding parametrization SHALL be skipped (`pytest.skip`) with a diagnostic message naming the FQN and the reason, rather than failing the test suite. When OM returns a valid column list, the check SHALL apply the same column-name and type comparison as the DDL layers, using the same type-mapping table and the same handling of `customProperties.origin=sink_metadata` (excluded from source, required at sink).
+
+A CI workflow SHALL run `make ingest-all` whenever `infrastructure/docker/postgres/init.sql` or `infrastructure/docker/clickhouse/create_tables.sql` changes in a pull request, so OM's view of the schema is refreshed before the OM-layer drift check runs. Absent this hook, the OM layer becomes a false-positive generator on legitimate schema changes.
+
+#### Scenario: OM-layer check runs against source and sink
+
+- **WHEN** the drift test runs with the OM server reachable and the catalog populated by `make ingest-all`
+- **AND** the contract `customers.yaml` declares columns `id`, `name`, `email`, `created_at`, `_version`, `_deleted`
+- **THEN** two OM-layer parametrizations SHALL execute — one against `ecommerce-postgres.public.customers` (verifying `id`, `name`, `email`, `created_at`; excluding `_version` and `_deleted`) and one against `ecommerce-clickhouse.ecommerce_analytics.customers_cdc` (verifying all six columns)
+- **AND** both SHALL PASS when OM's reported columns match the contract (with type mapping applied)
+
+#### Scenario: OM unreachable is a skip, not a failure
+
+- **WHEN** the drift test runs on a workstation where the governance stack is not up (`http://localhost:8585` returns connection-refused)
+- **THEN** the OM-layer parametrizations SHALL be reported as `SKIPPED` with a reason message identifying the FQN and the connection error
+- **AND** `make test` SHALL exit with status 0 (assuming no other test failures)
+- **AND** the four DDL/GX layers SHALL continue to be hard-gated as normal
+
+#### Scenario: OM disagreement fails the drift test
+
+- **WHEN** the OM server is reachable
+- **AND** the contract declares column `orders.discount` (not sink metadata)
+- **AND** OM's cached view of `ecommerce-postgres.public.orders` does not include `discount` (e.g., `make ingest-all` was not re-run after the DDL change)
+- **THEN** the drift test SHALL fail with a message identifying the contract file, the layer (`om-source`), the missing column, and a hint pointing at `make ingest-all` as the likely remediation
+
+#### Scenario: CI hook re-ingests when schema files change
+
+- **WHEN** a pull request modifies `infrastructure/docker/postgres/init.sql` or `infrastructure/docker/clickhouse/create_tables.sql`
+- **THEN** the CI workflow SHALL start the governance stack, run `make ingest-all` to refresh OM, and then run `make test`
+- **AND** the OM-layer check SHALL run against the fresh catalog (not skipped, not stale)
+
 ### Requirement: contract-drift-ci-gate
 
 The drift test SHALL be discoverable by pytest via the `tests/` collection path used by `make test`, and failures SHALL cause `make test` to exit with a non-zero status. No dedicated Makefile target is required; the test SHALL run as part of the existing `uv run pytest` invocation.

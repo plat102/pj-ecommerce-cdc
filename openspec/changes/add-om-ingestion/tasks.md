@@ -4,36 +4,36 @@
 - [x] 0.2 Write design.md — 6 decisions covering ephemeral runner, version pinning, JWT auth, ingest-status target, docs entry point, fail-fast composite
 - [x] 0.3 Write tasks.md (this file)
 - [x] 0.4 Write specs deltas: MODIFIED `data-governance/openmetadata-ingestion` with 6 new scenarios (per-source + idempotency + fail-fast + status); MODIFIED `infrastructure/per-service-targets` for the five new Makefile targets
-- [ ] 0.5 User approves design direction before implementation begins
+- [x] 0.5 User approves design direction before implementation begins
 
 ## 1. Phase 1 — Verification prerequisites
 
-- [ ] 1.1 Verify `openmetadata/ingestion:1.5.9` runs `metadata ingest --help` without error via a one-shot `docker run --rm --network ecommerce-network` — confirms network reachability and that no additional connector extras are needed for our three sources.
-- [ ] 1.2 Verify each of the three ingestion YAMLs (`postgres.yaml`, `kafka.yaml`, `clickhouse.yaml`) contains a `workflowConfig.openMetadataServerConfig.securityConfig.jwtToken` field capable of receiving env expansion. If not, add it (uniform pattern). Commit any YAML edits as a single "prep" chunk.
-- [ ] 1.3 Determine OM 1.5.9 default admin JWT: shell into `openmetadata-server`, cat `/opt/openmetadata/conf/openmetadata.yaml`, extract the `jwtTokenConfiguration` block. Record whether the admin token is a well-known constant (hardcode as default in `.env.example`) or per-install generated (docs need "grab from …" step).
+- [x] 1.1 Verified `openmetadata/ingestion:1.5.9` — network reachable, `metadata` CLI available at `/home/airflow/.local/bin/metadata`. Discovery: the image's default entrypoint is `airflow`, not `metadata`, so the Makefile targets pass `--entrypoint metadata` (see Makefile `INGESTION_DOCKER_RUN`).
+- [x] 1.2 Verified the three YAMLs. All use `${OM_INGESTION_JWT}` for JWT expansion (env var name chosen over the tasks.md-proposed `OPENMETADATA_JWT_TOKEN` — kept the existing shorter name in the YAMLs to avoid churn). Fixed `clickhouse.yaml` during Phase 4: OM 1.5.9's ClickHouse connector rejects the `authType: password:` shape and expects `password:` at the top level of `serviceConnection.config`.
+- [x] 1.3 OM 1.5.9 uses per-install RSA keys (from `/opt/openmetadata/conf/openmetadata.yaml`: `rsapublicKeyFilePath`, `rsaprivateKeyFilePath`) — the JWT is NOT a well-known constant. Docs now instruct operators to grab the long-lived `ingestion-bot` JWT via OM Settings → Bots (UI path) or via the two-step admin login + user-fetch API (CLI path). Both are documented in `docs/governance.md#obtain-the-ingestion-jwt`.
 
 ## 2. Phase 2 — Makefile targets
 
-- [ ] 2.1 Add `INGESTION_IMAGE := docker.getcollate.io/openmetadata/ingestion:$(or $(OPENMETADATA_VERSION),1.5.9)` variable near the top of the Makefile (after existing `COMPOSE_*` block).
-- [ ] 2.2 Add `ingest-pg`, `ingest-kafka`, `ingest-clickhouse` targets. Each SHALL: `docker run --rm --network ecommerce-network -v $(PWD)/data-platform/governance/openmetadata/ingestion:/ingestion:ro -e OPENMETADATA_JWT_TOKEN=$(OPENMETADATA_JWT_TOKEN) $(INGESTION_IMAGE) metadata ingest -c /ingestion/<source>.yaml`. Include a `## help` comment string.
-- [ ] 2.3 Add `ingest-all` target: `$(MAKE) ingest-pg && $(MAKE) ingest-kafka && $(MAKE) ingest-clickhouse` (fail-fast on first error).
-- [ ] 2.4 Add `ingest-status` target: three `curl -sf http://localhost:8585/api/v1/services/{databaseServices,messagingServices,pipelineServices}?limit=100 | jq '.data | length'` calls with human-readable prefixes; exit non-zero if OM unreachable.
-- [ ] 2.5 Update `.PHONY` to include `ingest-pg ingest-kafka ingest-clickhouse ingest-all ingest-status`.
+- [x] 2.1 Added `INGESTION_IMAGE` variable (and `INGESTION_YAML_DIR`, `INGESTION_DOCKER_RUN` helpers) in the Governance Catalog section of the Makefile (after `status-governance`).
+- [x] 2.2 Added `ingest-pg`, `ingest-kafka`, `ingest-clickhouse`. Each guards on `OM_INGESTION_JWT` being non-empty and runs `metadata ingest -c /ingestion/<source>.yaml` via the ephemeral `docker run --rm` invocation. Env expansion of `${OM_INGESTION_JWT}` and `${CLICKHOUSE_PASSWORD}` inside the YAMLs is handled by passing both vars through `-e` to the container.
+- [x] 2.3 Added `ingest-all` — sequential `$(MAKE) ingest-pg`, `$(MAKE) ingest-kafka`, `$(MAKE) ingest-clickhouse` (fail-fast confirmed in task 4.7).
+- [x] 2.4 Added `ingest-status` — loops over the three service kinds with `Authorization: Bearer $(OM_INGESTION_JWT)` (OM 1.5.9 endpoints require auth); prints "AUTH FAILED" on unauthorized response, "OM unreachable" on empty body. Non-zero exit if OM unreachable or the JWT is unset.
+- [x] 2.5 `.PHONY` updated with all five targets.
 
 ## 3. Phase 3 — Env + docs
 
-- [ ] 3.1 Update `.env.example` — add commented `OPENMETADATA_JWT_TOKEN` placeholder with a one-line note pointing at the default admin token path (or the OM UI "Bots" page for token retrieval, depending on task 1.3 outcome).
-- [ ] 3.2 Create `docs/governance.md` with sections: intro (what OM does here), "Populate the catalog" (`make up-governance && make ingest-all`), "Verify" (`make ingest-status`), "Where to look in the UI" (Explore → Databases → `ecommerce-postgres`, etc.), "When to re-ingest", "Troubleshooting" (JWT auth, connection refused, image pull, arm64/amd64 platform notes).
+- [x] 3.1 Added commented `OM_INGESTION_JWT` placeholder to `.env.example` with a note explaining the per-install nature and pointing at `docs/governance.md`.
+- [x] 3.2 `docs/governance.md` already existed from prior changes. Extended its "Catalog & lineage" section with three new subsections: "Populate the catalog" (workflow + idempotency + filters), "Obtain the ingestion JWT" (both UI and CLI paths), and "After ingestion" (what the operator should see in OM Explore).
 
 ## 4. Phase 4 — Live smoke
 
-- [ ] 4.1 `make up-governance` from clean, wait for `openmetadata-server` health check to pass (~90s from cold, ~15s if MySQL/ES volumes warm).
-- [ ] 4.2 `make ingest-pg` — verify exit 0, then `curl -sf http://localhost:8585/api/v1/services/databaseServices/name/ecommerce-postgres` returns 200 with a body containing the service definition.
-- [ ] 4.3 `make ingest-kafka` — verify `curl -sf http://localhost:8585/api/v1/services/messagingServices/name/ecommerce-kafka` returns 200 and includes the three `pg.public.*` topics.
-- [ ] 4.4 `make ingest-clickhouse` — verify `curl -sf http://localhost:8585/api/v1/services/databaseServices/name/ecommerce-clickhouse` returns 200 and includes the three `*_cdc` tables.
-- [ ] 4.5 `make ingest-status` — verify output shows Database services: 2, Messaging services: 1.
-- [ ] 4.6 Idempotency: re-run `make ingest-all` and confirm exit 0 with no duplicate services in the status output.
-- [ ] 4.7 Fail-fast: `make stop` postgres only, then `make ingest-all` — verify Postgres step fails, Kafka + ClickHouse steps do NOT run.
+- [x] 4.1 `make up-governance` was already running when I started; OM at http://localhost:8585 healthy.
+- [x] 4.2 `make ingest-pg` — 6 records, 0 errors, "Success %: 100.0". `curl … /services/databaseServices/name/ecommerce-postgres` returns 200 with `serviceType: Postgres`.
+- [x] 4.3 `make ingest-kafka` — 18 records, 0 errors. `curl … /services/messagingServices/name/ecommerce-kafka` returns 200; `GET /topics?service=ecommerce-kafka` returns 17 topics including CDC (`customers_cdc`, `pg.public.*`) and DLQ (`*_dlq`, `*_sink_dlq`) topics. Note: 16 warnings on Debezium's `io.debezium.connector.postgresql.Source` nested Avro type — expected interop gotcha, doesn't block ingestion.
+- [x] 4.4 `make ingest-clickhouse` — after fixing `authType` shape (see task 1.2), 6 records, 0 errors. `GET /tables?service=ecommerce-clickhouse` returns 6 tables (`customers`, `customers_cdc`, `orders`, `orders_cdc`, `products`, `products_cdc`).
+- [x] 4.5 `make ingest-status` — databaseServices: 2, messagingServices: 1, pipelineServices: 0 (matches spec expectation; pipelineServices stays 0 until `add-spark-openlineage` lands).
+- [x] 4.6 Idempotency: re-ran `make ingest-all` — all three workflows returned Success 100%, counts remain 2 / 1 / 0.
+- [x] 4.7 Fail-fast: temporarily changed `hostPort: postgres:5432` → `postgres-nope:5432` in `postgres.yaml`. `make ingest-all` failed on Postgres step, did not proceed to Kafka or ClickHouse. Restored the YAML.
 
 ## 5. Archive
 

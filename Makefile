@@ -32,7 +32,8 @@ export $(shell sed 's/=.*//' $(ENV_FILE))
         restart-spark spark-shell pyspark-shell spark-submit jupyter-token \
         up-analytics down-analytics logs-analytics grafana-url clickhouse-client \
         up-gx-docs down-gx-docs logs-gx-docs sh-gx-docs \
-        migrate-governance
+        migrate-governance \
+        ingest-pg ingest-kafka ingest-clickhouse ingest-all ingest-status
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -303,6 +304,44 @@ logs-governance: ## Show OpenMetadata logs
 
 status-governance: ## Show OpenMetadata stack status
 	$(COMPOSE_GOVERNANCE) ps
+
+INGESTION_IMAGE := docker.getcollate.io/openmetadata/ingestion:$(or $(OPENMETADATA_VERSION),1.5.9)
+INGESTION_YAML_DIR := $(PWD)/data-platform/governance/openmetadata/ingestion
+# The ingestion image's default entrypoint is `airflow`; override it so we can invoke
+# the `metadata` CLI directly for one-shot workflows.
+INGESTION_DOCKER_RUN = docker run --rm --network ecommerce-network \
+	--entrypoint metadata \
+	-v $(INGESTION_YAML_DIR):/ingestion:ro \
+	-e OM_INGESTION_JWT=$(OM_INGESTION_JWT) \
+	-e CLICKHOUSE_PASSWORD=$(CLICKHOUSE_PASSWORD) \
+	$(INGESTION_IMAGE)
+
+ingest-pg: ## Ingest PostgreSQL metadata into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/postgres.yaml
+
+ingest-kafka: ## Ingest Kafka topics + Apicurio schemas into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/kafka.yaml
+
+ingest-clickhouse: ## Ingest ClickHouse metadata into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/clickhouse.yaml
+
+ingest-all: ## Run all three ingestions sequentially (fail-fast). Requires OM_INGESTION_JWT.
+	$(MAKE) ingest-pg
+	$(MAKE) ingest-kafka
+	$(MAKE) ingest-clickhouse
+
+ingest-status: ## Show OpenMetadata service counts (database / messaging / pipeline). Requires OM_INGESTION_JWT.
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	@echo "OpenMetadata catalog service counts:"
+	@for kind in databaseServices messagingServices pipelineServices; do \
+	  printf "  %-18s: " "$$kind"; \
+	  body=$$(curl -s -H "Authorization: Bearer $(OM_INGESTION_JWT)" "http://localhost:8585/api/v1/services/$$kind?limit=100"); \
+	  if [ -z "$$body" ]; then echo "OM unreachable at http://localhost:8585"; exit 1; fi; \
+	  echo "$$body" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data', []))) if 'data' in d else print('AUTH FAILED (' + d.get('message', 'unknown') + ')')"; \
+	done
 
 #=====================================================
 # --- GX Data Docs (nginx sidecar) -------------------
