@@ -37,7 +37,7 @@
 
 ## 5. Archive
 
-- [ ] 5.1 Run `openspec validate --changes --specs` — all pass.
-- [ ] 5.2 `openspec archive add-om-ingestion --yes`.
-- [ ] 5.3 Verify main specs post-archive: `data-governance/openmetadata-ingestion` gained the new scenarios; `infrastructure/per-service-targets` mentions `ingest-*`.
-- [ ] 5.4 Tick post-archive tasks in the archived file.
+- [x] 5.1 Ran `openspec validate --changes --specs` — 13 passed, 0 failed.
+- [x] 5.2 `openspec archive add-om-ingestion --yes` — archived as `2026-07-20-add-om-ingestion`; specs `data-governance` and `infrastructure` updated.
+- [x] 5.3 Verified post-archive: `data-governance/openmetadata-ingestion` gained the six new scenarios (per-source + idempotency + fail-fast + ingest-status); `infrastructure/per-service-targets` now mentions `ingest-pg / ingest-kafka / ingest-clickhouse / ingest-all / ingest-status` and includes the "ingest-all is a sequential composite" scenario.
+- [x] 5.4 Post-archive tasks ticked (this bullet).
