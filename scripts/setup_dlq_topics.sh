@@ -29,6 +29,12 @@ RETENTION_BYTES="${DLQ_RETENTION_BYTES:-104857600}"
 # DLQ topic elsewhere in the codebase (Debezium connector config, Spark sink
 # wrapper, GX gate) MUST come with a matching entry here — the `dlq-topic-retention`
 # spec asserts every broker topic ending in `_dlq` carries the config below.
+#
+# `dlq_replay_log` is the audit-log companion topic read by
+# `scripts/dlq_replay.py audit-log`. Its name lacks the `_dlq` suffix but it
+# belongs to the DLQ operational surface, so it shares the same retention.
+# Pre-creating it here (before any writer exists) prevents a future writer
+# from auto-creating it with broker defaults.
 DLQ_TOPICS=(
     debezium_connect_dlq
     customers_cdc_dlq
@@ -37,6 +43,7 @@ DLQ_TOPICS=(
     customers_cdc_sink_dlq
     products_cdc_sink_dlq
     orders_cdc_sink_dlq
+    dlq_replay_log
 )
 
 echo "Configuring ${#DLQ_TOPICS[@]} DLQ topics on ${BOOTSTRAP} via ${KAFKA_CONTAINER}"

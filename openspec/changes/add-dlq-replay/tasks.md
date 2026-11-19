@@ -8,19 +8,19 @@
 
 ## 1. Phase 1 — Diagnostic CLI + topic
 
-- [ ] 1.1 Add `dlq_replay_log` to `DLQ_TOPICS` array in `scripts/setup_dlq_topics.sh` so it inherits the shared retention config.
-- [ ] 1.2 Create `scripts/dlq_replay.py` with argparse subparser layout `list | inspect | audit-log`. Top-level help SHALL state "read-only diagnostic tool; replay pending in add-dlq-avro-replay".
-- [ ] 1.3 Implement pure helpers in the same file: `build_replay_key`, `strip_dlq_envelope`, `pick_dest_topic`, `refuse_if_re_replay`, plus the `RefusedError` type. No CLI subcommand calls them in this change.
-- [ ] 1.4 Implement `list --topic <name>` — reads from earliest with a bounded consumer timeout, formats one row per message with offset, key preview, error stage, truncated error message.
-- [ ] 1.5 Implement `inspect --topic <name> --offset N` — reads until it finds the requested offset, prints the value as pretty JSON.
-- [ ] 1.6 Implement `audit-log [--format json|table]` — reads `dlq_replay_log` from earliest, prints either JSON array or a per-column table.
-- [ ] 1.7 Add `dlq-list` and `dlq-inspect` Makefile targets — thin wrappers accepting `TOPIC=` / `OFFSET=` variables.
-- [ ] 1.8 `chmod +x scripts/dlq_replay.py`.
-- [ ] 1.9 Extend the "DLQ operations" section in `docs/observability.md` with a single paragraph pointing operators at `scripts/dlq_replay.py list --topic <name>` for incident review.
+- [x] 1.1 Add `dlq_replay_log` to `DLQ_TOPICS` array in `scripts/setup_dlq_topics.sh` so it inherits the shared retention config.
+- [x] 1.2 Create `scripts/dlq_replay.py` with argparse subparser layout `list | inspect | audit-log`. Top-level help SHALL state "read-only diagnostic tool; replay pending in add-dlq-avro-replay".
+- [x] 1.3 Implement pure helpers in the same file: `build_replay_key`, `strip_dlq_envelope`, `pick_dest_topic`, `refuse_if_re_replay`, plus the `RefusedError` type. No CLI subcommand calls them in this change.
+- [x] 1.4 Implement `list --topic <name>` — reads from earliest with a bounded consumer timeout, formats one row per message with offset, key preview, error stage, truncated error message.
+- [x] 1.5 Implement `inspect --topic <name> --offset N` — reads until it finds the requested offset, prints the value as pretty JSON.
+- [x] 1.6 Implement `audit-log [--format json|table]` — reads `dlq_replay_log` from earliest, prints either JSON array or a per-column table.
+- [x] 1.7 Add `dlq-list` and `dlq-inspect` Makefile targets — thin wrappers accepting `TOPIC=` / `OFFSET=` variables.
+- [x] 1.8 `chmod +x scripts/dlq_replay.py`.
+- [x] 1.9 Extend the "DLQ operations" section in `docs/observability.md` with a single paragraph pointing operators at `scripts/dlq_replay.py list --topic <name>` for incident review.
 
 ## 2. Phase 2 — Tests
 
-- [ ] 2.1 `tests/scripts/test_dlq_replay.py` — pure helper tests (no Kafka needed):
+- [x] 2.1 `tests/scripts/test_dlq_replay.py` — pure helper tests (no Kafka needed):
   - `test_build_replay_key_deterministic` — same inputs → same key.
   - `test_build_replay_key_distinct_by_offset` — different offset → different key.
   - `test_pick_dest_topic_sink_dlq` — `products_cdc_sink_dlq` → `pg.public.products`.
@@ -31,7 +31,7 @@
   - `test_refuse_if_re_replay_raises_when_field_present` — payload with `_replay_source_topic` raises with the reference to the original topic+offset.
   - `test_refuse_if_re_replay_passes_when_absent` — payload without the field returns cleanly.
   - `test_strip_dlq_envelope_drops_error_fields` — result has no `_error_*` keys, preserves everything else including `_version` and `_deleted`.
-- [ ] 2.2 CLI argument parsing sanity — verify `dlq_replay.py --help` lists exactly `list`, `inspect`, `audit-log` and no `replay`.
+- [x] 2.2 CLI argument parsing sanity — verify `dlq_replay.py --help` lists exactly `list`, `inspect`, `audit-log` and no `replay`.
 
 ## 3. Phase 3 — Live smoke
 

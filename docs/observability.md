@@ -144,7 +144,7 @@ Full host-side port list is in [`architecture.md`](architecture.md#local-service
 
 ## DLQ operations
 
-**Retention semantics.** The 7 DLQ topics (`debezium_connect_dlq`, `{customers,products,orders}_cdc_dlq`, `{customers,products,orders}_cdc_sink_dlq`) are pre-created on `make up` by `scripts/setup_dlq_topics.sh` with `retention.ms=604800000` (7 days, matching the Loki retention window so DLQ triage and correlated logs go dark on the same clock) and `retention.bytes=104857600` (100 MB per topic). After 7 days a quarantined record is gone forever — if you need longer, raise retention *before* the DLQ starts filling.
+**Retention semantics.** The 7 DLQ topics (`debezium_connect_dlq`, `{customers,products,orders}_cdc_dlq`, `{customers,products,orders}_cdc_sink_dlq`) plus the audit-log companion topic `dlq_replay_log` are pre-created on `make up` by `scripts/setup_dlq_topics.sh` with `retention.ms=604800000` (7 days, matching the Loki retention window so DLQ triage and correlated logs go dark on the same clock) and `retention.bytes=104857600` (100 MB per topic). After 7 days a quarantined record is gone forever — if you need longer, raise retention *before* the DLQ starts filling.
 
 **Emergency raise for post-incident forensics.** Bump retention on-the-fly, e.g. for 30 days:
 
@@ -155,6 +155,8 @@ DLQ_RETENTION_MS=2592000000 make apply-dlq-topics
 The bump is transient. The next `make up` (without the env var set) drift-corrects every topic back to the 7d default. For persistent bumps, set `DLQ_RETENTION_MS` and/or `DLQ_RETENTION_BYTES` in `infrastructure/docker/.env` so the override survives across boots.
 
 **No built-in drain.** There is no "acknowledge and clear" workflow — retention expiry is the only automatic zeroing path. To force-zero a DLQ, delete + re-create the topic (`docker exec kafka1 kafka-topics --delete --topic <name> --bootstrap-server localhost:9092 && make apply-dlq-topics`). Draining is destructive: use it only after you've captured the offending records via the Streamlit DLQ Triage view or `kcat -C -t <topic> -e`. The alert `dlq_traffic_present` (see [Alerts](#alerts)) fires within 1 minute of the first new record, so operators typically triage well within the 7-day window.
+
+**Diagnostic CLI for incident review.** `scripts/dlq_replay.py` is a read-only diagnostic tool (it never produces a Kafka message; replay is pending in a follow-up change, `add-dlq-avro-replay`). Start with `uv run python scripts/dlq_replay.py list --topic <name>` (or `make dlq-list TOPIC=<name>`) to get one row per message with partition, offset, key preview, `_error_stage` and a truncated `_error_message`; then `inspect --topic <name> --offset N` (or `make dlq-inspect TOPIC=<name> OFFSET=N`) prints that message's full JSON payload, and `audit-log --format json|table` reads `dlq_replay_log` (empty until a replay writer exists). It runs from the host against `localhost:9093`; override with `KAFKA_BOOTSTRAP_SERVERS` or `--bootstrap-servers`.
 
 ## Verify locally
 

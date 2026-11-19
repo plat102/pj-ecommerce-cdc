@@ -32,7 +32,7 @@ export $(shell sed 's/=.*//' $(ENV_FILE))
         restart-spark spark-shell pyspark-shell spark-submit jupyter-token \
         up-analytics down-analytics logs-analytics grafana-url clickhouse-client \
         up-gx-docs down-gx-docs logs-gx-docs sh-gx-docs \
-        migrate-governance \
+        migrate-governance dlq-list dlq-inspect \
         ingest-pg ingest-kafka ingest-clickhouse ingest-all ingest-status
 
 help: ## Show this help message
@@ -123,6 +123,14 @@ apply-pg-connector: ## Apply PostgreSQL CDC connector
 
 apply-dlq-topics: ## Pre-create DLQ topics with explicit retention (idempotent)
 	@./scripts/setup_dlq_topics.sh
+
+dlq-list: ## List messages of a DLQ topic, read-only (TOPIC=products_cdc_sink_dlq)
+	@test -n "$(TOPIC)" || { echo "❌ TOPIC is required, e.g. make dlq-list TOPIC=products_cdc_sink_dlq"; exit 1; }
+	@uv run python scripts/dlq_replay.py list --topic "$(TOPIC)"
+
+dlq-inspect: ## Print one DLQ message as JSON, read-only (TOPIC=... OFFSET=N)
+	@test -n "$(TOPIC)" -a -n "$(OFFSET)" || { echo "❌ TOPIC and OFFSET are required, e.g. make dlq-inspect TOPIC=products_cdc_sink_dlq OFFSET=0"; exit 1; }
+	@uv run python scripts/dlq_replay.py inspect --topic "$(TOPIC)" --offset "$(OFFSET)"
 
 check-connector: ## Check connector status
 	@echo "📋 Checking connector status..."
