@@ -1,0 +1,97 @@
+{
+  "id": null,
+  "uid": "central-dlq",
+  "title": "Central DLQ",
+  "tags": ["observability", "dlq", "error-handling"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "DLQ message rate per topic (5m)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~\".+_dlq\"}[5m]))",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "msg/s",
+          "custom": {"drawStyle": "line", "fillOpacity": 20}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Total DLQ offsets by topic",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\".+_dlq\"})",
+          "legendFormat": "{{topic}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "DLQ topics present",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "count(count by (topic) (kafka_topic_partition_current_offset{topic=~\".+_dlq\"}))",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 3}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Recent DLQ producer log lines",
+      "type": "logs",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 16},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "{container=~\"debezium|ed-pyspark-jupyter\"} |~ \"(?i)DLQ|dead[- ]letter\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

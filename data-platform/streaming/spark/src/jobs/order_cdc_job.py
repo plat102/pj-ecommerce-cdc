@@ -1,9 +1,9 @@
 from src.config.app_config import AppConfig
 from src.jobs.base_cdc_job import BaseCDCJob
-from src.schemas.cdc_schemas import CDCSchemas
 from src.transformations.kafka_parser import KafkaMessageParser
 from src.transformations.order_cdc_transformer import OrderCDCTransformer
 from src.transformations.cdc_transformer import CDCTransformer
+from src.utils.helpers import fetch_avro_schema
 from src.common.logging import get_logger
 
 logger = get_logger(__name__)
@@ -16,16 +16,17 @@ class OrderCDCJob(BaseCDCJob):
         logger.info(f"OrderCDCJob process started. kafka_reader: {self.kafka_reader}")
         topic = self.config.kafka.topics["orders"]
         stream_df = self.kafka_reader.read_stream(topic)
-        schemas = CDCSchemas()
 
-        # Parse binary into JSON
-        json_df = KafkaMessageParser.parse_raw_message(stream_df)
+        # Fetch Avro schemas from Apicurio (Confluent-compat endpoint) once at
+        # query build time; the producer schema is stable per topic.
+        registry_url = self.config.schema_registry.url
+        key_schema_json = fetch_avro_schema(registry_url, f"{topic}-key")
+        value_schema_json = fetch_avro_schema(registry_url, f"{topic}-value")
 
-        # Apply schema
-        transformed_df = KafkaMessageParser.parse_json_structures(
-            kafka_json_df=json_df,
-            key_schema=schemas.get_key_schema(),
-            value_schema=schemas.get_orders_value_schema(),
+        transformed_df = KafkaMessageParser.parse_avro_message(
+            kafka_stream=stream_df,
+            key_avro_schema=key_schema_json,
+            value_avro_schema=value_schema_json,
         )
 
         # Transform

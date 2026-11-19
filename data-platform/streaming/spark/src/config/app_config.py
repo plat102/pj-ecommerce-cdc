@@ -44,6 +44,28 @@ class ClickHouseConfig:
 
 
 @dataclass
+class SchemaRegistryConfig:
+    """Apicurio Registry connection (Confluent-compatible endpoint)."""
+    url: str = "http://schema-registry:8080/apis/ccompat/v7"
+
+
+@dataclass
+class GxDataDocsConfig:
+    """Great Expectations second-pass runner (opt-in).
+
+    When `enabled` is True, `GxSuiteRunner` validates every micro-batch
+    via the real GX engine and rebuilds Data Docs into
+    `<project_dir>/uncommitted/data_docs/local_site/`. The inline gate in
+    `quality.py` remains authoritative regardless.
+    """
+    enabled: bool = False
+    project_dir: str = "/opt/gx/"
+    textfile_dir: str = "/opt/gx/textfile/"
+    validations_retention_count: int = 100
+    validations_retention_seconds: int = 24 * 3600
+
+
+@dataclass
 class SparkConfig:
     """Spark application configuration"""
     app_name: str = "Ecommerce CDC Processing"
@@ -75,6 +97,19 @@ class AppConfig:
             password=os.getenv("CLICKHOUSE_PASSWORD", "clickhouse123")
         )
         
+        self.schema_registry = SchemaRegistryConfig(
+            url=os.getenv(
+                "SCHEMA_REGISTRY_URL",
+                "http://schema-registry:8080/apis/ccompat/v7",
+            )
+        )
+
+        self.gx_data_docs = GxDataDocsConfig(
+            enabled=os.getenv("ENABLE_GX_DATA_DOCS", "0") == "1",
+            project_dir=os.getenv("GX_PROJECT_DIR", "/opt/gx/"),
+            textfile_dir=os.getenv("GX_TEXTFILE_DIR", "/opt/gx/textfile/"),
+        )
+
         self.spark = SparkConfig(
             app_name=os.getenv("SPARK_APP_NAME", "Ecommerce CDC Processing"),
             master=os.getenv("SPARK_MASTER", "local[*]"),

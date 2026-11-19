@@ -84,7 +84,7 @@ class BaseCDCJob(BaseStreamingJob):
             query = (
                 df.writeStream
                 .foreachBatch(write_batch_func)
-                .option('checkpointLocation', f'{self.config.checkpoint_location}/{table_name}')
+                .option('checkpointLocation', f'{self.config.checkpoint_location}/{table_name}/v1')
                 .trigger(processingTime=self.config.trigger_interval)
                 .start()
             )

@@ -10,6 +10,9 @@ COMPOSE_DBZ := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.debezium.yml
 COMPOSE_UI := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.ui.yml
 COMPOSE_SPARK := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.spark.yml
 COMPOSE_ANALYTICS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.analytics.yml
+COMPOSE_GOVERNANCE := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.governance.yml
+COMPOSE_OBS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.observability.yml
+COMPOSE_GX_DOCS := $(COMPOSE) -f $(DOCKER_DIR)/docker-compose.gx-docs.yml
 
 COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.db.yml \
@@ -17,7 +20,8 @@ COMPOSE_ALL := $(COMPOSE) \
 	-f $(DOCKER_DIR)/docker-compose.debezium.yml \
 	-f $(DOCKER_DIR)/docker-compose.ui.yml \
 	-f $(DOCKER_DIR)/docker-compose.spark.yml \
-	-f $(DOCKER_DIR)/docker-compose.analytics.yml
+	-f $(DOCKER_DIR)/docker-compose.analytics.yml \
+	-f $(DOCKER_DIR)/docker-compose.observability.yml
 
 include $(ENV_FILE)
 export $(shell sed 's/=.*//' $(ENV_FILE))
@@ -26,7 +30,10 @@ export $(shell sed 's/=.*//' $(ENV_FILE))
         up-db down-db up-kafka down-kafka sh-pg \
         up-spark down-spark logs-spark status-spark sh-spark-master \
         restart-spark spark-shell pyspark-shell spark-submit jupyter-token \
-        up-analytics down-analytics logs-analytics grafana-url clickhouse-client
+        up-analytics down-analytics logs-analytics grafana-url clickhouse-client \
+        up-gx-docs down-gx-docs logs-gx-docs sh-gx-docs \
+        migrate-governance dlq-list dlq-inspect \
+        ingest-pg ingest-kafka ingest-clickhouse ingest-all ingest-status
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -66,6 +73,7 @@ sh-kafka: ## Connect to Kafka shell
 
 up: ## Start entire stack
 	$(COMPOSE_ALL) up -d
+	${MAKE} apply-dlq-topics || echo "❌ Failed to apply DLQ topic retention"
 	${MAKE} apply-pg-connector || echo "❌ Failed to apply PostgreSQL connector"
 
 start: ## Start all containers
@@ -113,6 +121,17 @@ apply-pg-connector: ## Apply PostgreSQL CDC connector
 		-H "Content-Type: application/json" \
 		-d @data-platform/cdc/connectors/register-pg.json
 
+apply-dlq-topics: ## Pre-create DLQ topics with explicit retention (idempotent)
+	@./scripts/setup_dlq_topics.sh
+
+dlq-list: ## List messages of a DLQ topic, read-only (TOPIC=products_cdc_sink_dlq)
+	@test -n "$(TOPIC)" || { echo "❌ TOPIC is required, e.g. make dlq-list TOPIC=products_cdc_sink_dlq"; exit 1; }
+	@uv run python scripts/dlq_replay.py list --topic "$(TOPIC)"
+
+dlq-inspect: ## Print one DLQ message as JSON, read-only (TOPIC=... OFFSET=N)
+	@test -n "$(TOPIC)" -a -n "$(OFFSET)" || { echo "❌ TOPIC and OFFSET are required, e.g. make dlq-inspect TOPIC=products_cdc_sink_dlq OFFSET=0"; exit 1; }
+	@uv run python scripts/dlq_replay.py inspect --topic "$(TOPIC)" --offset "$(OFFSET)"
+
 check-connector: ## Check connector status
 	@echo "📋 Checking connector status..."
 	@curl -s http://localhost:8083/connectors/pg-connector-ecommerce/status | python -m json.tool || echo "❌ Connector not found or Debezium not running"
@@ -130,56 +149,31 @@ restart-connector: ## Restart PostgreSQL connector
 	@curl -X POST http://localhost:8083/connectors/pg-connector-ecommerce/restart || echo "❌ Failed to restart connector"
 
 #=====================================================
-# --- Python Environment ----------------------------
+# --- Python Environment (uv) ------------------------
 #=====================================================
 
-setup-venv: ## Setup Python virtual environment
-	./setup_venv.sh
+uv-sync: ## Create/update .venv from pyproject.toml + uv.lock (main + dev groups)
+	uv sync --group dev
 
-activate-venv: ## Show activation command
-	@echo "Run: source venv/bin/activate"
+uv-shell: ## Show activation command for the uv-managed venv
+	@echo "Run: . .venv/bin/activate"
+	@echo "Or prefix commands with: uv run <cmd>"
 
-clean-venv: ## Remove virtual environment
-	rm -rf venv
+uv-clean: ## Remove .venv and uv.lock (also purge legacy venv/ if present)
+	rm -rf .venv uv.lock venv
 
-check-venv: ## Check if virtual environment is active
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment is not active"; \
-		echo "💡 Run: source venv/bin/activate"; \
-		exit 1; \
-	else \
-		echo "✅ Virtual environment is active: $$VIRTUAL_ENV"; \
-	fi
-
-install-deps: check-venv ## Install Python dependencies (requires active venv)
-	pip install -r requirements.txt
-
-install-system-pip: ## Install pip system-wide (Ubuntu/Debian)
-	sudo apt update && sudo apt install python3-pip -y
-
-setup-python: ## Setup complete Python environment (system pip + venv + deps)
-	@echo "🐍 Setting up complete Python environment..."
-	@if ! command -v pip3 >/dev/null 2>&1; then \
-		echo "📦 Installing pip..."; \
-		sudo apt update && sudo apt install python3-pip -y; \
-	fi
-	@echo "📁 Setting up virtual environment..."
-	$(MAKE) setup-venv
-	@echo "✅ Python environment ready!"
-	@echo "💡 To activate: source venv/bin/activate"
-
-freeze-deps: ## Freeze current dependencies
-	pip freeze > requirements.txt
+test: ## Run pytest inside the uv-managed venv (exit 5 "no tests" treated as pass)
+	@uv run pytest; status=$$?; if [ $$status -eq 5 ]; then exit 0; else exit $$status; fi
 
 #=====================================================
 # --- Testing UI -------------------------------------
 #=====================================================
 
-run-ui-local: ## Start CDC Testing UI locally (requires active venv)
-	cd application/cdc-testing-ui && streamlit run app.py --server.port 8501
+run-ui-local: ## Start CDC Testing UI locally via uv (no manual activation needed)
+	cd application/cdc-testing-ui && uv run streamlit run app.py --server.port 8501
 
-check-ui-deps: ## Check if UI dependencies are installed
-	python -c "import streamlit, psycopg2, kafka, pandas, plotly; print('✅ All dependencies installed')"
+check-ui-deps: ## Check if UI dependencies are installed (uses .venv)
+	uv run python -c "import streamlit, psycopg2, kafka, pandas, plotly; print('All dependencies installed')"
 
 up-ui: ## Start CDC Testing UI as Docker service
 	$(COMPOSE) \
@@ -206,8 +200,8 @@ build-ui: ## Build CDC Testing UI Docker image
 logs-ui: ## Show CDC Testing UI logs
 	$(COMPOSE_UI) logs -f
 
-demo-data: ## Generate demo data for CDC testing (requires active venv)
-	cd application/cdc-testing-ui && python demo_data.py
+demo-data: ## Generate demo data for CDC testing via uv (no manual activation needed)
+	cd application/cdc-testing-ui && uv run python demo_data.py
 
 quick-start: ## Quick start for development (up + connector + demo data + ui)
 	@echo "🚀 Starting CDC development environment..."
@@ -290,6 +284,106 @@ restart-analytics: ## Restart ClickHouse + Grafana services
 clickhouse-client: ## Connect to ClickHouse client
 	$(COMPOSE_ANALYTICS) exec clickhouse clickhouse-client
 
+#=====================================================
+# --- Governance Catalog (OpenMetadata) --------------
+#=====================================================
+
+up-governance: ## Start OpenMetadata + MySQL + Elasticsearch (heavy ~4GB RAM). Run `migrate-governance` once on first boot.
+	$(COMPOSE_GOVERNANCE) up -d
+
+migrate-governance: ## Bootstrap OpenMetadata schema in MySQL (run once, or after OPENMETADATA_VERSION bump)
+	docker run --rm --network ecommerce-network \
+	  -e DB_DRIVER_CLASS=com.mysql.cj.jdbc.Driver \
+	  -e DB_SCHEME=mysql -e DB_USE_SSL=false \
+	  -e DB_HOST=openmetadata-mysql -e DB_PORT=3306 \
+	  -e DB_USER=openmetadata_user -e DB_USER_PASSWORD=openmetadata_password \
+	  -e OM_DATABASE=openmetadata_db \
+	  -e ELASTICSEARCH_HOST=openmetadata-elasticsearch -e ELASTICSEARCH_PORT=9200 -e ELASTICSEARCH_SCHEME=http \
+	  -e SERVER_PORT=8585 -e SERVER_ADMIN_PORT=8586 \
+	  docker.getcollate.io/openmetadata/server:$(or $(OPENMETADATA_VERSION),1.5.9) \
+	  ./bootstrap/openmetadata-ops.sh migrate
+	docker restart openmetadata-server
+
+down-governance: ## Stop OpenMetadata stack
+	$(COMPOSE_GOVERNANCE) down --remove-orphans
+
+logs-governance: ## Show OpenMetadata logs
+	$(COMPOSE_GOVERNANCE) logs -f
+
+status-governance: ## Show OpenMetadata stack status
+	$(COMPOSE_GOVERNANCE) ps
+
+INGESTION_IMAGE := docker.getcollate.io/openmetadata/ingestion:$(or $(OPENMETADATA_VERSION),1.5.9)
+INGESTION_YAML_DIR := $(PWD)/data-platform/governance/openmetadata/ingestion
+# The ingestion image's default entrypoint is `airflow`; override it so we can invoke
+# the `metadata` CLI directly for one-shot workflows.
+INGESTION_DOCKER_RUN = docker run --rm --network ecommerce-network \
+	--entrypoint metadata \
+	-v $(INGESTION_YAML_DIR):/ingestion:ro \
+	-e OM_INGESTION_JWT=$(OM_INGESTION_JWT) \
+	-e CLICKHOUSE_PASSWORD=$(CLICKHOUSE_PASSWORD) \
+	$(INGESTION_IMAGE)
+
+ingest-pg: ## Ingest PostgreSQL metadata into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/postgres.yaml
+
+ingest-kafka: ## Ingest Kafka topics + Apicurio schemas into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/kafka.yaml
+
+ingest-clickhouse: ## Ingest ClickHouse metadata into OpenMetadata catalog
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	$(INGESTION_DOCKER_RUN) ingest -c /ingestion/clickhouse.yaml
+
+ingest-all: ## Run all three ingestions sequentially (fail-fast). Requires OM_INGESTION_JWT.
+	$(MAKE) ingest-pg
+	$(MAKE) ingest-kafka
+	$(MAKE) ingest-clickhouse
+
+ingest-status: ## Show OpenMetadata service counts (database / messaging / pipeline). Requires OM_INGESTION_JWT.
+	@if [ -z "$(OM_INGESTION_JWT)" ]; then echo "OM_INGESTION_JWT is not set. See docs/governance.md for how to obtain a bot JWT."; exit 1; fi
+	@echo "OpenMetadata catalog service counts:"
+	@for kind in databaseServices messagingServices pipelineServices; do \
+	  printf "  %-18s: " "$$kind"; \
+	  body=$$(curl -s -H "Authorization: Bearer $(OM_INGESTION_JWT)" "http://localhost:8585/api/v1/services/$$kind?limit=100"); \
+	  if [ -z "$$body" ]; then echo "OM unreachable at http://localhost:8585"; exit 1; fi; \
+	  echo "$$body" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data', []))) if 'data' in d else print('AUTH FAILED (' + d.get('message', 'unknown') + ')')"; \
+	done
+
+#=====================================================
+# --- GX Data Docs (nginx sidecar) -------------------
+#=====================================================
+
+up-gx-docs: ## Start GX Data Docs static site at http://localhost:8890
+	@mkdir -p data-platform/governance/gx-runtime/uncommitted/data_docs/local_site
+	$(COMPOSE_GX_DOCS) up -d
+
+down-gx-docs: ## Stop GX Data Docs static site
+	$(COMPOSE_GX_DOCS) down --remove-orphans
+
+logs-gx-docs: ## Show GX Data Docs nginx logs
+	$(COMPOSE_GX_DOCS) logs -f
+
+sh-gx-docs: ## Open a shell in the GX Data Docs nginx container
+	$(COMPOSE_GX_DOCS) exec gx-data-docs-server sh
+
+#=====================================================
+# --- Observability (Loki + Prometheus + Alloy) ------
+#=====================================================
+
+up-observability: ## Start observability stack (loki + alloy + prometheus + cadvisor + node-exporter)
+	$(COMPOSE_OBS) up -d
+
+down-observability: ## Stop observability stack
+	$(COMPOSE_OBS) down --remove-orphans
+
+logs-observability: ## Tail observability stack logs
+	$(COMPOSE_OBS) logs -f
+
+status-observability: ## Show observability stack status
+	$(COMPOSE_OBS) ps
+
 grafana-url: ## Show Grafana access info
 	@echo "🔗 Grafana URL: http://localhost:3000"
 	@echo "👤 Username: admin"
@@ -370,6 +464,18 @@ cdc-status: ## Check CDC jobs status
 	@docker exec ed-pyspark-jupyter pgrep -f 'java.*spark' > /dev/null && echo "✅ Java Spark processes are running" || echo "❌ No Java Spark processes"
 	@echo "📋 All Spark-related processes:"
 	@docker exec ed-pyspark-jupyter pgrep -fl 'spark' || echo "   None"
+
+CHECKPOINT_ROOT ?= /tmp/spark-checkpoints
+cdc-rotate-checkpoint: ## Archive a CDC checkpoint (use: make cdc-rotate-checkpoint TABLE=customers_cdc)
+	@if [ -z "$(TABLE)" ]; then echo "TABLE is required (e.g., make cdc-rotate-checkpoint TABLE=customers_cdc)"; exit 2; fi
+	@docker exec ed-pyspark-jupyter sh -c '\
+		src="$(CHECKPOINT_ROOT)/$(TABLE)"; \
+		if [ ! -d "$$src" ]; then echo "no checkpoint at $$src"; exit 0; fi; \
+		archive_dir="$(CHECKPOINT_ROOT)/_archived/$$(date +%Y%m%d-%H%M%S)"; \
+		mkdir -p "$$archive_dir"; \
+		mv "$$src" "$$archive_dir/$(TABLE)"; \
+		mkdir -p "$$src"; \
+		echo "moved $$src -> $$archive_dir/$(TABLE)"'
 
 #=====================================================
 # --- Dashboard Management --------------------------

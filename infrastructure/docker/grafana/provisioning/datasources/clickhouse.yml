@@ -17,7 +17,7 @@ datasources:
       host: clickhouse
       port: 8123
       protocol: http
-      username: default
+      username: analyst_readonly
       version: "4.8.2"
       logs:
         contextColumns: []
@@ -29,5 +29,5 @@ datasources:
         durationUnit: nanoseconds
         otelVersion: latest
     secureJsonData:
-      password: "clickhouse123"
+      password: $CLICKHOUSE_ANALYST_PASSWORD
     editable: true

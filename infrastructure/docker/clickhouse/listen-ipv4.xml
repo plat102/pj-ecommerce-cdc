@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!--
+Force IPv4-only listen on ClickHouse. Docker Desktop's LinuxKit VM often has
+IPv6 disabled at the interface level; the image's default `<listen_host>::</listen_host>`
+then fails to bind and leaves 8123/9000 closed.
+-->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

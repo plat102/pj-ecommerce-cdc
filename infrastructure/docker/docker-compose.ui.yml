@@ -4,6 +4,7 @@ services:
       context: ../../
       dockerfile: infrastructure/docker/streamlit/Dockerfile
     container_name: cdc-testing-ui
+    restart: on-failure:3
     ports:
       - "8501:8501"
     environment:
@@ -15,3 +16,8 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka1:9092
     networks:
       - ecommerce-network
+
+networks:
+  ecommerce-network:
+    name: ecommerce-network
+    external: true

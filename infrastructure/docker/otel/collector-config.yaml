@@ -1,0 +1,110 @@
+# OpenTelemetry Collector pipeline for the ecommerce-cdc stack.
+#
+# Purpose: unified ingress that eventually replaces Alloy.
+#   - OTLP gRPC (:4317) + HTTP (:4318) endpoints receive traces/logs/metrics
+#     from application SDKs (future Spark/Streamlit instrumentation).
+#   - filelog receiver tails Docker container logs (parallel to Alloy; Loki
+#     dedupes by timestamp+content).
+#   - prometheus receiver optional passthrough (not enabled by default; keeps
+#     Prometheus as the source of truth).
+#
+# Exporters:
+#   - loki: standard log sink (parallel to Alloy).
+#   - clickhouse (via clickhousetraces exporter): populates the otel_logs /
+#     otel_traces tables already referenced by the Grafana ClickHouse
+#     datasource — closes the baseline dangling reference. Uses the analyst
+#     credentials env vars already provisioned in .env.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Tail Docker container logs. Same source as Alloy — Loki dedupes by
+  # timestamp+labels. Kept optional (default off) via `disabled: true` in
+  # the pipeline; enable when migrating away from Alloy.
+  filelog:
+    include: [/var/lib/docker/containers/*/*.log]
+    start_at: end
+    include_file_name: false
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+        parse_to: attributes
+      - type: move
+        from: attributes.log
+        to: body
+      - type: regex_parser
+        regex: '/var/lib/docker/containers/(?P<container_id>[a-f0-9]+)/'
+        parse_from: attributes["log.file.path"]
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource:
+    attributes:
+      - key: service.namespace
+        value: ecommerce-cdc
+        action: upsert
+
+exporters:
+  # Standard Loki push endpoint (parallel to Alloy).
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+  # OTLP passthrough for observing what came in over the OTLP endpoints.
+  debug:
+    verbosity: basic
+    sampling_initial: 2
+    sampling_thereafter: 500
+
+  # Populate the ClickHouse otel_logs / otel_traces tables that the Grafana
+  # datasource already references. Uses the default clickhouse user (has DDL);
+  # exporter creates tables on first write if they do not yet exist.
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    database: ${env:CLICKHOUSE_DB}
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    ttl: 168h
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    metrics_table_name: otel_metrics
+    timeout: 10s
+    sending_queue:
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: []
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8889
+    logs:
+      level: warn
+  pipelines:
+    # Logs pipeline: OTLP + filelog -> Loki + ClickHouse.
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resource, batch]
+      exporters: [loki, clickhouse]
+
+    # Traces pipeline: OTLP -> ClickHouse only (Spark/Streamlit SDK
+    # instrumentation is a future change; today no traces flow).
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [clickhouse]

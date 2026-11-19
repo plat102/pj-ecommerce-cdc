@@ -58,5 +58,6 @@ def create_navigation():
             "🛒 Orders",
             "📡 Kafka Monitor",
             "🧪 Batch Testing",
+            "🚨 DLQ Triage",
         ],
     )

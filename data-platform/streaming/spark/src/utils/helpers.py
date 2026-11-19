@@ -1,8 +1,64 @@
 """
 Pure utility functions for data processing
 """
+import json
+import logging
+
+import requests
 from pyspark.sql.functions import udf
 from pyspark.sql.types import StringType
+
+logger = logging.getLogger(__name__)
+
+
+def _fetch_raw_schema(registry_url: str, subject: str) -> dict:
+    url = f"{registry_url.rstrip('/')}/subjects/{subject}/versions/latest"
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    schema_str = resp.json().get("schema")
+    if not schema_str:
+        raise RuntimeError(f"Schema Registry returned no 'schema' field for {subject}")
+    return json.loads(schema_str)
+
+
+def _inline_refs(schema_node, registry_url: str, seen: set) -> object:
+    """Walk an Avro schema tree and replace string-named type references with
+    their fully-resolved subschemas fetched from the registry.
+
+    Debezium registers auxiliary types (like `io.debezium.connector.postgresql.Source`)
+    as separate subjects and references them by fully-qualified name inside the
+    envelope schema. Spark's `from_avro` needs a self-contained schema, so we
+    inline every reference the first time we see it.
+    """
+    if isinstance(schema_node, dict):
+        return {k: _inline_refs(v, registry_url, seen) for k, v in schema_node.items()}
+    if isinstance(schema_node, list):
+        return [_inline_refs(item, registry_url, seen) for item in schema_node]
+    if isinstance(schema_node, str) and "." in schema_node and schema_node not in seen:
+        # Primitives and already-inlined types won't match this branch.
+        try:
+            ref_schema = _fetch_raw_schema(registry_url, schema_node)
+        except requests.HTTPError:
+            return schema_node  # not a subject we own; leave as-is
+        seen.add(schema_node)
+        return _inline_refs(ref_schema, registry_url, seen)
+    return schema_node
+
+
+def fetch_avro_schema(registry_url: str, subject: str) -> str:
+    """Fetch a registered Avro schema and return a self-contained JSON string.
+
+    Any string-named type references (Debezium's `Source`, envelope refs, etc.)
+    are resolved against the same registry so `from_avro` receives a schema it
+    can parse without further lookups. The registry URL should point at
+    Apicurio's Confluent-compatible endpoint
+    (e.g. `http://schema-registry:8080/apis/ccompat/v7`).
+    """
+    root = _fetch_raw_schema(registry_url, subject)
+    resolved = _inline_refs(root, registry_url, seen=set())
+    schema_str = json.dumps(resolved)
+    logger.info("Fetched + resolved Avro schema for subject %s", subject)
+    return schema_str
 
 
 def decode_bytes(bytes_array):

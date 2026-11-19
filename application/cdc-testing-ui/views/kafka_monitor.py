@@ -5,14 +5,32 @@ import streamlit as st
 import time
 from datetime import datetime
 
+from config.settings import KAFKA_CONFIG
+from governance.access_log import emit_startup
+
+
+def _emit_access_log_once():
+    """Emit one startup event per Streamlit session (session_state gate)."""
+    if st.session_state.get("_access_log_emitted"):
+        return
+    emit_startup(
+        principal="streamlit-kafka-monitor",
+        topics=list(KAFKA_CONFIG["topics"].values()),
+        bootstrap_servers=KAFKA_CONFIG["bootstrap_servers"],
+        extra={"source": "cdc-testing-ui"},
+    )
+    st.session_state["_access_log_emitted"] = True
+
 
 def show_kafka_monitor():
     """Show Kafka message monitor with real-time updates"""
     st.header("📡 Kafka CDC Messages Monitor")
-    
+
     if "kafka_manager" not in st.session_state:
         st.warning("Kafka not initialized. Please go to Database Operations first.")
         return
+
+    _emit_access_log_once()
 
     col1, col2 = st.columns([2, 1])
     

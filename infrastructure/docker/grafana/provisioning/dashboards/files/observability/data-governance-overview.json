@@ -1,0 +1,104 @@
+{
+  "id": null,
+  "uid": "data-governance-overview",
+  "title": "Data Governance Overview",
+  "tags": ["governance", "gx", "data-quality"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "links": [
+    {
+      "title": "GX Data Docs (localhost:8890)",
+      "url": "http://localhost:8890/",
+      "type": "link",
+      "icon": "external link",
+      "targetBlank": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "GX Suite Success Rate (24h)",
+      "type": "bargauge",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "Rolling 24h average of the fraction of expectations that passed per suite. Requires ENABLE_GX_DATA_DOCS=1 on the Spark job. Click the panel link to open the full Data Docs site at http://localhost:8890/.",
+      "targets": [
+        {
+          "expr": "avg_over_time(gx_suite_success_ratio[24h])",
+          "legendFormat": "{{table}} — {{suite}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "minVizWidth": 0,
+        "minVizHeight": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.9},
+              {"color": "green", "value": 0.98}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Top 5 Failing Expectations",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "description": "The five expectations with the lowest latest success ratio. Drill into a specific batch via the Data Docs link above.",
+      "targets": [
+        {
+          "expr": "bottomk(5, gx_expectation_success_ratio)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "__name__": true, "job": true, "instance": true},
+            "renameByName": {
+              "Value": "success_ratio",
+              "table": "table",
+              "expectation_type": "expectation",
+              "column": "column"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"align": "auto"}
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "success_ratio"},
+            "properties": [
+              {"id": "unit", "value": "percentunit"},
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

@@ -1,0 +1,111 @@
+{
+  "id": null,
+  "uid": "central-logs",
+  "title": "Central Logs",
+  "tags": ["observability", "logs"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "container",
+        "type": "query",
+        "datasource": {"type": "loki", "uid": "loki"},
+        "query": "label_values(container)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "search",
+        "type": "textbox",
+        "current": {"text": "", "value": ""},
+        "label": "Search text"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log lines / minute (by container)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum by (container) (rate({container=~\"$container\"} [1m]))",
+          "legendFormat": "{{container}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error line rate",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum(rate({container=~\"$container\"} |~ \"(?i)error\" [5m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 0.1},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Warn line rate",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "sum(rate({container=~\"$container\"} |~ \"(?i)warn\" [5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Live logs",
+      "type": "logs",
+      "gridPos": {"h": 20, "w": 24, "x": 0, "y": 13},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [
+        {
+          "expr": "{container=~\"$container\"} |= \"$search\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

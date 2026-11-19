@@ -14,6 +14,7 @@ from src.jobs.customers_cdc_job import CDCProcessor
 from src.jobs.product_cdc_job import ProductCDCJob
 from src.jobs.order_cdc_job import OrderCDCJob
 from src.config.app_config import AppConfig
+from src.governance.access_log import emit_startup
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,7 +53,15 @@ def main():
     logger.info(f"Debug mode: {config.debug_mode}")
     logger.info(f"Kafka servers: {config.kafka.bootstrap_servers}")
     logger.info(f"ClickHouse URL: {config.clickhouse.jdbc_url}")
-    
+
+    subscribed_topic = config.kafka.topics.get(args.job_type)
+    emit_startup(
+        principal=f"spark-{args.job_type}-cdc",
+        topics=[subscribed_topic] if subscribed_topic else [],
+        bootstrap_servers=config.kafka.bootstrap_servers,
+        extra={"debug_mode": config.debug_mode},
+    )
+
     # Create processor based on job type
     try:
         if args.job_type == 'customers':
